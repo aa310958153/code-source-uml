@@ -1,0 +1,59 @@
+@startuml
+participant "security starter" as sb
+participant "WebSecurityConfiguration" as wc
+participant "webSecurity" as ws
+participant "WebSecurityConfigurerAdapter" as wa
+participant "HttpSecurity" as hs
+
+autonumber
+==security初始化==
+activate sb
+sb->>sb:starter触发加载SecurityAutoConfiguration到spring容器
+sb->>sb:SecurityAutoConfiguration@Import加载WebSecurityConfiguration\n到容器进行生命周期初始化
+
+sb->>wc: spring生命周期触发setFilterChainProxySecurityConfigurer
+deactivate sb
+alt WebSecurityConfiguration.setFilterChainProxySecurityConfigurer
+activate wc
+wc->>wc: 通过形参注入获取容器中WebSecurityConfigurerAdapter
+wc->>wc: 执行排序后加入到成员变量webSecurity
+end
+deactivate wc
+
+activate sb
+sb->>wc: spring生命周期触发springSecurityFilterChain
+deactivate sb
+
+alt WebSecurityConfiguration.springSecurityFilterChain
+activate wc
+wc->>wc: 从已有filterChain获取实现了FilterSecurityInterceptor\n加入到webSecurity.securityInterceptor
+wc->>wc: 从容器获取webSecurityCustomizers\n执行回调获取到webSecurity做定制化操作
+wc->>ws: 执行webSecurity.build方法
+deactivate wc
+
+activate ws
+
+activate wa
+alt configurers就是我们的adapter
+ws->>wa : 执行init()遍历configurers调用init方法传入this
+alt 构建HttpSecurity
+wa->>wa : 获取从容器获取事件广播AuthenticationEventPublisher(支持自定义)
+wa->>wa : 构建authenticationManager主要做登录认证(支持自定义)
+wa->>wa : spi方式获取AbstractHttpConfigurer(也就是filter过滤器的建造者，通过它可以自定义filter)
+wa->>wa : 构建 HttpSecurity(filterChain构建建造者)
+wa->>wa : 执行configure()传入 HttpSecurity,也就是为什么我们可以在adapter子类中重写configure方法\n获取到HttpSecurity进行定制化设置
+wa->>ws : HttpSecurity建造者加入到webSecurity[web.addSecurityFilterChainBuilder(http)]
+end
+
+ws->>wa : 执行beforeConfigure 空实现钩子方法
+ws->>wa : 执行configure() 遍历configurers调用configure方法传入this\n可以通过这个钩子方法获取到webSecurity
+ws->>hs : 执行performBuild() 遍历HttpSecurity的build方法构建SecurityFilterChain list
+activate hs
+ws->>ws : 将SecurityFilterChain list交给FilterChainProxy统一管理\nFilterChainProxy就是security的servlet filter入口
+deactivate hs
+end
+deactivate ws
+deactivate wa
+end
+
+@enduml
