@@ -11,14 +11,14 @@ app->>app:new SpringApplication实例
 alt SpringApplication实例构造函数
 app->>app:构造函数从META-INF/spring.factories加载BootstrapRegistryInitializer实现类,并设置成员变量bootstrapRegistryInitializers
 app->>app:构造函数从META-INF/spring.factories加载ApplicationContextInitializer实现类,并设置到成员变量initializers
-app->>app:构造函数从META-INF/spring.factories加载ApplicationListener实现类，并设置到成员变量 listeners
+app->>app:构造函数从META-INF/spring.factories加载ApplicationListener实现类，并设置到成员变量 listeners(后续使用这个是spring的监听器)
 app->>app:获取执行run方法的class全名称并设置到成员变量mainApplicationClass
 end
 alt 执行run
 app->>app:初始化DefaultBootstrapContext,并变量回调给initialize方法
 app->>app:从META-INF/spring.factories加载SpringApplicationRunListener实现类并回调.starting方法
 app->>app:根据环境类型初始化Environment环境变量
-app->>app:遍历listeners执行listeners.environmentPrepared方法触发环境变量加载
+app->>app:从META-INF/spring.factories加载SpringApplicationRunListener实现类,执行listeners.environmentPrepared方法触发环境变量加载
 app->>app:根据环境类型初始化spring容器
 end
 alt 初始化spring容器
@@ -27,9 +27,9 @@ app->>app:context.setEnvironment(environment);设置加载的环境变量
 app->>app:触发initializers回调initializer.initialize
 app->>app:触发listeners回调listeners.contextPrepared
 app->>app:将mainApplicationClass初始化到spring容器(启动类的注解则生效)
-app->>app:触发listeners回调listeners.contextLoaded
+app->>app:从META-INF/spring.factories加载SpringApplicationRunListener实现类回调listeners.contextLoaded
 app->>app:调用spring容器的refresh方法进入spring生命周期
-app->>app:调用spring容器listeners.started
+app->>app:从META-INF/spring.factories加载SpringApplicationRunListener实现类，触发listeners.started
 app->>app:从spring容器中获取ApplicationRunner 和CommandLineRunner执行回调
 end
 deactivate app

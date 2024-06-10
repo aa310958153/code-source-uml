@@ -1,0 +1,60 @@
+@startuml
+participant "Application main" as main
+participant "SpringApplication" as app
+participant "EnvironmentPostProcessorApplicationListener" as listener
+participant "ConfigDataEnvironmentPostProcessor" as configDataProcessor
+==spring boot启动==
+autonumber
+activate main
+main->>app:SpringApplication.run
+deactivate main
+activate app
+app->>app:new SpringApplication实例
+alt SpringApplication实例构造函数
+app->>app:构造函数从META-INF/spring.factories加载BootstrapRegistryInitializer实现类,并设置成员变量bootstrapRegistryInitializers
+app->>app:构造函数从META-INF/spring.factories加载ApplicationContextInitializer实现类,并设置到成员变量initializers
+app->>app:构造函数从META-INF/spring.factories加载ApplicationListener实现类，并设置到成员变量 listeners
+app->>app:获取执行run方法的class全名称并设置到成员变量mainApplicationClass
+end
+alt 执行run
+app->>app:初始化DefaultBootstrapContext,并变量回调给initialize方法
+app->>app:从META-INF/spring.factories加载SpringApplicationRunListener实现类并回调.starting方法
+app->>app:根据环境类型初始化Environment环境变量
+app->>app:遍历listeners执行listeners.environmentPrepared方法触发环境变量加载
+app->>app:根据环境类型初始化spring容器
+end
+alt 初始化spring容器
+app->>app:根据环境类型初始化spring容器
+alt 初始化ApplicationServletEnvironment
+app->>app:初始化MutablePropertySources委托给PropertySourcesPropertyResolver并设到成员变量propertySources,后续则可以使用动态表达式${age}
+app->>app:new PropertiesPropertySource()add到propertySources,同时System.getProperties()JVM相关参数加载。
+app->>app:new SystemEnvironmentPropertySource()add到propertySources,同时将 System.getenv() 获得map 主要获取系统相关环境变量加载。
+app->>app:从META-INF/spring.factories加载SpringApplicationRunListener实现类,回调environmentPrepared
+alt environmentPrepared
+app->>app:初始化initialMulticaster,获取SpringApplication的listeners并add到initialMulticaster
+app->>listener:调用initialMulticaster.multicastEvent发送ApplicationEnvironmentPreparedEvent事件
+activate listener
+listener->>listener:从META-INF/spring.factories加载EnvironmentPostProcessor
+listener->>listener:遍历执行调用.postProcessEnvironment(environment, application);
+listener->>configDataProcessor:postProcessEnvironment(environment, application);
+deactivate listener
+activate configDataProcessor
+configDataProcessor->>configDataProcessor:首先加载我们的application.yml文件,转成PropertySource add到Environment
+configDataProcessor->>configDataProcessor:解析spring.profiles.active环境配置
+configDataProcessor->>configDataProcessor:进行对应环境的yml文件加载,转成PropertySource add到Environment
+deactivate configDataProcessor
+end
+
+end
+app->>app:context.setEnvironment(environment);设置加载的环境变量
+app->>app:触发initializers回调initializer.initialize
+app->>app:触发listeners回调listeners.contextPrepared
+app->>app:将mainApplicationClass初始化到spring容器(启动类的注解则生效)
+app->>app:从META-INF/spring.factories加载SpringApplicationRunListener实现类,触发回调listeners.contextLoaded
+app->>app:调用spring容器的refresh方法进入spring生命周期
+app->>app:从META-INF/spring.factories加载SpringApplicationRunListener实现类，触发回调listeners.started
+app->>app:从spring容器中获取ApplicationRunner 和CommandLineRunner执行回调
+end
+deactivate app
+
+@enduml
