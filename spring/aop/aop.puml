@@ -1,0 +1,34 @@
+@startuml
+participant "spring生命周期" as spring
+participant "SpringAOP" as aop
+participant "AopUtils" as AopUtils
+participant "ProxyFactory" as factory
+==spring boot启动==
+autonumber
+activate spring
+spring->aop:触发创建bena后的回调applyBeanPostProcessorsAfterInitialization
+deactivate spring
+activate aop
+aop->aop:AbstractAutoProxyCreator.postProcessAfterInitialization 获得被代理对象
+aop->aop: findCandidateAdvisors获取所有advisors
+aop->AopUtils:AopUtils.findAdvisorsThatCanApply(candidateAdvisors, beanClass)过滤出能满足条件的Advisors
+deactivate
+activate AopUtils
+AopUtils->AopUtils:判断Advisor是否实现了 IntroductionAdvisor\n如果实现了通过 接口方法getClassFilter().matches(targetClass)来做判断
+AopUtils->AopUtils:判断Advisor是否实现了 PointcutAdvisor\n如果实现了通过 接口方法getPointcut()获取Pointcut\n如果实现Pointcut.getMethodMatcher为MethodMatcher.true表示符合条件\n如果MethodMatcher实现了IntroductionAwareMethodMatcher则反射获取bean的所有Method依次回调让实现类做判断
+activate aop
+AopUtils->aop:返回符合条件的Advisor
+aop->aop:对Advisor进行排序
+aop->factory:调用createProxy传入advisor和bean执行代理
+deactivate
+activate factory
+factory->factory:创建ProxyFactory实例
+factory->factory:设置ProxyFactory的TargetSource
+factory->factory:设置ProxyFactory的Advisors
+factory->factory:调用ProxyFactory.getProxy开始生成代理
+alt createAopProxy获取对应的代理类工厂
+factory->factory:判断走JdkDynamicAopProxy还是Cglib动态代理\nif (targetClass.isInterface() || Proxy.isProxyClass(targetClass) || ClassUtils.isLambdaClass(targetClass)) {
+factory->factory:JdkDynamicAopProxy具体代理实现InvocationHandler\nCglibAopProxy
+end
+deactivate factory
+@enduml
