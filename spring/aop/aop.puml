@@ -3,10 +3,10 @@ participant "spring生命周期" as spring
 participant "SpringAOP" as aop
 participant "AopUtils" as AopUtils
 participant "ProxyFactory" as factory
-==spring boot启动==
+==初始化==
 autonumber
 activate spring
-spring->aop:触发创建bena后的回调applyBeanPostProcessorsAfterInitialization
+spring->aop:触发创建bena后的回调BeanPostProcessor.applyBeanPostProcessorsAfterInitialization
 deactivate spring
 activate aop
 aop->aop:AbstractAutoProxyCreator.postProcessAfterInitialization 获得被代理对象
@@ -27,7 +27,7 @@ factory->factory:设置ProxyFactory的TargetSource
 factory->factory:设置ProxyFactory的Advisors
 factory->factory:调用ProxyFactory.getProxy开始生成代理
 alt createAopProxy获取对应的代理类工厂
-factory->factory:判断走JdkDynamicAopProxy还是Cglib动态代理\nif (targetClass.isInterface() || Proxy.isProxyClass(targetClass) || ClassUtils.isLambdaClass(targetClass)) {
+factory->factory:判断走JdkDynamicAopProxy还是Cglib动态代理(默认都是cglib)\nif (targetClass.isInterface() || Proxy.isProxyClass(targetClass) || ClassUtils.isLambdaClass(targetClass)) {
 factory->factory:JdkDynamicAopProxy具体代理实现InvocationHandler\nCglibAopProxy
 end
 deactivate factory

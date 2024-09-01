@@ -4,9 +4,9 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="1e71cf2f-46a6-4c8d-8397-335f80723364" name="Changes" comment="feat:生成uml图片">
-      <change afterPath="$PROJECT_DIR$/spring/transaction/transaction.puml" afterDir="false" />
+    <list default="true" id="1e71cf2f-46a6-4c8d-8397-335f80723364" name="Changes" comment="feat:增加spring aop">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/spring/aop/aop.puml" beforeDir="false" afterPath="$PROJECT_DIR$/spring/aop/aop.puml" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -65,7 +65,8 @@
     <MESSAGE value="feat:增加说明文件" />
     <MESSAGE value="feat:增加环境变量加载原理" />
     <MESSAGE value="feat:生成uml图片" />
-    <option name="LAST_COMMIT_MESSAGE" value="feat:生成uml图片" />
+    <MESSAGE value="feat:增加spring aop" />
+    <option name="LAST_COMMIT_MESSAGE" value="feat:增加spring aop" />
   </component>
   <component name="VgoProject">
     <integration-enabled>false</integration-enabled>
