@@ -2,6 +2,7 @@
 participant "spring生命周期" as spring
 participant "SpringAOP" as aop
 participant "AopUtils" as AopUtils
+participant "BeanFactoryTransactionAttributeSourceAdvisor" as transactionAdvisor
 participant "ProxyFactory" as factory
 ==初始化==
 autonumber
@@ -10,7 +11,7 @@ spring->aop:触发创建bena后的回调BeanPostProcessor.applyBeanPostProcessor
 deactivate spring
 activate aop
 aop->aop:InfrastructureAdvisorAutoProxyCreator.postProcessAfterInitialization 获得被代理对象
-aop->aop: findCandidateAdvisors获取所有advisors
+aop->aop: findCandidateAdvisors获取所有advisors 针对事务是BeanFactoryTransactionAttributeSourceAdvisor
 aop->AopUtils:AopUtils.findAdvisorsThatCanApply(candidateAdvisors, beanClass)过滤出能满足条件的Advisors
 deactivate
 activate AopUtils

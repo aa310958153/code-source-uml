@@ -5,6 +5,7 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="1e71cf2f-46a6-4c8d-8397-335f80723364" name="Changes" comment="feat:增加spring aop">
+      <change afterPath="$PROJECT_DIR$/spring/transaction/initproxy.puml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/spring/aop/aop.puml" beforeDir="false" afterPath="$PROJECT_DIR$/spring/aop/aop.puml" afterDir="false" />
     </list>
