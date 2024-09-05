@@ -15,8 +15,10 @@ aop->aop: findCandidateAdvisors获取所有advisors 针对事务是BeanFactoryTr
 aop->AopUtils:AopUtils.findAdvisorsThatCanApply(candidateAdvisors, beanClass)过滤出能满足条件的Advisors
 deactivate
 activate AopUtils
-AopUtils->AopUtils:判断Advisor是否实现了 IntroductionAdvisor\n如果实现了通过 接口方法getClassFilter().matches(targetClass)来做判断
-AopUtils->AopUtils:判断Advisor是否实现了 PointcutAdvisor\n如果实现了通过 接口方法getPointcut()获取Pointcut\n如果实现Pointcut.getMethodMatcher为MethodMatcher.true表示符合条件\n如果MethodMatcher实现了IntroductionAwareMethodMatcher则反射获取bean的所有Method依次回调让实现类做判断
+AopUtils->transactionAdvisor:判断Advisor是否实现了 PointcutAdvisor\n如果实现了通过 接口方法getPointcut()
+AopUtils->AopUtils:调用pointcut.getClassFilter().matches(targetClass) 判断当前类是否支持aop
+AopUtils->AopUtils:调用pointcut.getMethodMatcher()==TrueMethodMatcher.INSTANCE 表示所有方法都支持代理
+AopUtils->AopUtils:调用反射类的mehtod调用循环methodMatcher.matches(method, targetClass))\n匹配过程中会将事务配置通过TransactionAttribute缓存起来\n没有则缓存空并返回不被代理
 activate aop
 AopUtils->aop:返回符合条件的Advisor
 aop->aop:对Advisor进行排序

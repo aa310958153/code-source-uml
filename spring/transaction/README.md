@@ -1,0 +1,3 @@
+BeanFactoryTransactionAttributeSourceAdvisor  对应的advice是TransactionInterceptor
+
+TransactionAttribute=RuleBasedTransactionAttribute
