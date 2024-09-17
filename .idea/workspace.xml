@@ -5,9 +5,14 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="1e71cf2f-46a6-4c8d-8397-335f80723364" name="Changes" comment="feat:更新spring 事务初始化过程">
-      <change afterPath="$PROJECT_DIR$/spring/transaction/README.md" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/spring/springboot/02加载环境变量/02bootstrapyml加载原理.puml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/spring/transaction/initproxy.puml" beforeDir="false" afterPath="$PROJECT_DIR$/spring/transaction/initproxy.puml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/spring/aop/aop.puml" beforeDir="false" afterPath="$PROJECT_DIR$/spring/aop/springaop代理生成时机.puml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/spring/security/init.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/spring/springboot/start.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/spring/springboot/start.puml" beforeDir="false" afterPath="$PROJECT_DIR$/spring/springboot/01生命周期/start.puml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/spring/springboot/start_load_environment.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/spring/springboot/start_load_environment.puml" beforeDir="false" afterPath="$PROJECT_DIR$/spring/springboot/02加载环境变量/01启动触发加载.puml" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -54,6 +59,8 @@
       <recent name="$PROJECT_DIR$" />
     </key>
     <key name="MoveFile.RECENT_KEYS">
+      <recent name="$PROJECT_DIR$/spring/springboot/加载环境变量" />
+      <recent name="$PROJECT_DIR$/spring/springboot/spring生命周期" />
       <recent name="$PROJECT_DIR$/spring" />
       <recent name="$PROJECT_DIR$/spring/springboot" />
     </key>

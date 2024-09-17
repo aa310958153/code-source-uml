@@ -1,0 +1,30 @@
+@startuml
+participant "SpringApplication" as app
+participant "BootstrapApplicationListener" as listener
+participant "ConfigFileApplicationListener" as configFile
+activate app
+app->app:SpringApplicationRunListener.environmentPrepared
+app->listener:onApplicationEvent
+deactivate app
+activate listener
+listener->listener:不触发加载 return spring.cloud.bootstrap.enabled!=true
+listener->listener:不触发加载 return (environment.getPropertySources().contains("bootstrap")
+listener->listener:初始化bootstrapEnvironment
+listener->listener:获取yml名字加载到环境变量 默认为bootstrap environment.resolvePlaceholders("${spring.cloud.bootstrap.name:bootstrap}")
+listener->listener:获取yml读取路径加载到环境变量 ${spring.cloud.bootstrap.location:}加载到环境变量 bootstrapEnvironment.add(spring.config.name)
+listener->listener:构建容器Builder SpringApplicationBuilder\n1.环境变量=bootstrapEnvironment\n2.容器类型为WebApplicationType.NONE\n3.设置config=BootstrapImportSelectorConfiguration
+listener->app:SpringApplicationBuilder.build触发spring boot 生命周期
+deactivate listener
+activate app
+app->app:SpringApplicationRunListener.environmentPrepared
+app->configFile:onApplicationEvent
+deactivate app
+activate configFile
+configFile->configFile:从spring.factories获取EnvironmentPostProcessor
+configFile->configFile :遍历执行postProcessEnvironment ,ConfigFileApplicationListener实现了EnvironmentPostProcessor接口
+configFile->configFile :内部基于环境变量配置读取配置文件
+configFile->listener: 利用spring spring boot生命周期构建容器成功，容器中也加载了环境变了
+deactivate configFile
+listener->listener:mergeDefaultProperties从容器中获取环境变量合并到主容器里面
+
+@enduml
