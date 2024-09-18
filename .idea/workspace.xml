@@ -4,15 +4,11 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="1e71cf2f-46a6-4c8d-8397-335f80723364" name="Changes" comment="feat:更新spring 事务初始化过程">
-      <change afterPath="$PROJECT_DIR$/spring/springboot/02加载环境变量/02bootstrapyml加载原理.puml" afterDir="false" />
+    <list default="true" id="1e71cf2f-46a6-4c8d-8397-335f80723364" name="Changes" comment="feat:配置文件加载原理">
+      <change afterPath="$PROJECT_DIR$/spring/springboot/02加载环境变量/01启动触发加载.png" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/spring/springboot/02加载环境变量/03apollo环境变量加载/README.MD" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/spring/aop/aop.puml" beforeDir="false" afterPath="$PROJECT_DIR$/spring/aop/springaop代理生成时机.puml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/spring/security/init.png" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/spring/springboot/start.png" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/spring/springboot/start.puml" beforeDir="false" afterPath="$PROJECT_DIR$/spring/springboot/01生命周期/start.puml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/spring/springboot/start_load_environment.png" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/spring/springboot/start_load_environment.puml" beforeDir="false" afterPath="$PROJECT_DIR$/spring/springboot/02加载环境变量/01启动触发加载.puml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/spring/springboot/02加载环境变量/02bootstrapyml加载原理.puml" beforeDir="false" afterPath="$PROJECT_DIR$/spring/springboot/02加载环境变量/02bootstrapyml加载原理.puml" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -75,7 +71,8 @@
     <MESSAGE value="feat:生成uml图片" />
     <MESSAGE value="feat:增加spring aop" />
     <MESSAGE value="feat:更新spring 事务初始化过程" />
-    <option name="LAST_COMMIT_MESSAGE" value="feat:更新spring 事务初始化过程" />
+    <MESSAGE value="feat:配置文件加载原理" />
+    <option name="LAST_COMMIT_MESSAGE" value="feat:配置文件加载原理" />
   </component>
   <component name="VgoProject">
     <integration-enabled>false</integration-enabled>
