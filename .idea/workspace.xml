@@ -4,11 +4,10 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="1e71cf2f-46a6-4c8d-8397-335f80723364" name="Changes" comment="feat:配置文件加载原理">
-      <change afterPath="$PROJECT_DIR$/spring/springboot/02加载环境变量/01启动触发加载.png" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/spring/springboot/02加载环境变量/03apollo环境变量加载/README.MD" afterDir="false" />
+    <list default="true" id="1e71cf2f-46a6-4c8d-8397-335f80723364" name="Changes" comment="feat:bootstrap配置文件加载原理">
+      <change afterPath="$PROJECT_DIR$/spring/springboot/02加载环境变量/02bootstrapyml加载原理.png" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/spring/springboot/02加载环境变量/03apollo环境变量加载/01apollo加载原理.puml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/spring/springboot/02加载环境变量/02bootstrapyml加载原理.puml" beforeDir="false" afterPath="$PROJECT_DIR$/spring/springboot/02加载环境变量/02bootstrapyml加载原理.puml" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -33,24 +32,25 @@
     <option name="hideEmptyMiddlePackages" value="true" />
     <option name="showLibraryContents" value="true" />
   </component>
-  <component name="PropertiesComponent">{
-  &quot;keyToString&quot;: {
-    &quot;RunOnceActivity.OpenProjectViewOnStart&quot;: &quot;true&quot;,
-    &quot;RunOnceActivity.ShowReadmeOnStart&quot;: &quot;true&quot;,
-    &quot;RunOnceActivity.go.formatter.settings.were.checked&quot;: &quot;true&quot;,
-    &quot;RunOnceActivity.go.migrated.go.modules.settings&quot;: &quot;true&quot;,
-    &quot;git-widget-placeholder&quot;: &quot;master&quot;,
-    &quot;go.import.settings.migrated&quot;: &quot;true&quot;,
-    &quot;last_opened_file_path&quot;: &quot;/Users/liqiang/Desktop/MyGithubProject/uml/code-source-uml/spring/springboot&quot;,
-    &quot;node.js.detected.package.eslint&quot;: &quot;true&quot;,
-    &quot;node.js.selected.package.eslint&quot;: &quot;(autodetect)&quot;,
-    &quot;nodejs_package_manager_path&quot;: &quot;npm&quot;,
-    &quot;settings.editor.selected.configurable&quot;: &quot;preferences.pluginManager&quot;,
-    &quot;vue.rearranger.settings.migration&quot;: &quot;true&quot;
+  <component name="PropertiesComponent"><![CDATA[{
+  "keyToString": {
+    "RunOnceActivity.OpenProjectViewOnStart": "true",
+    "RunOnceActivity.ShowReadmeOnStart": "true",
+    "RunOnceActivity.go.formatter.settings.were.checked": "true",
+    "RunOnceActivity.go.migrated.go.modules.settings": "true",
+    "git-widget-placeholder": "master",
+    "go.import.settings.migrated": "true",
+    "last_opened_file_path": "/Users/liqiang/Desktop/MyGithubProject/uml/code-source-uml/spring/springboot/02加载环境变量/03apollo环境变量加载",
+    "node.js.detected.package.eslint": "true",
+    "node.js.selected.package.eslint": "(autodetect)",
+    "nodejs_package_manager_path": "npm",
+    "settings.editor.selected.configurable": "preferences.pluginManager",
+    "vue.rearranger.settings.migration": "true"
   }
-}</component>
+}]]></component>
   <component name="RecentsManager">
     <key name="CopyFile.RECENT_KEYS">
+      <recent name="$PROJECT_DIR$/spring/springboot/02加载环境变量/03apollo环境变量加载" />
       <recent name="$PROJECT_DIR$/spring/springboot" />
       <recent name="$PROJECT_DIR$" />
     </key>
@@ -72,7 +72,8 @@
     <MESSAGE value="feat:增加spring aop" />
     <MESSAGE value="feat:更新spring 事务初始化过程" />
     <MESSAGE value="feat:配置文件加载原理" />
-    <option name="LAST_COMMIT_MESSAGE" value="feat:配置文件加载原理" />
+    <MESSAGE value="feat:bootstrap配置文件加载原理" />
+    <option name="LAST_COMMIT_MESSAGE" value="feat:bootstrap配置文件加载原理" />
   </component>
   <component name="VgoProject">
     <integration-enabled>false</integration-enabled>

@@ -1,0 +1,44 @@
+@startuml
+participant "SpringApplication" as app
+participant "ConfigFileApplicationListener" as configFile
+participant "ApolloApplicationContextInitializer" as apollo
+participant "ConfigService" as configService
+participant "DefaultConfigManager" as manager
+participant "DefaultConfigFactory" as factory
+activate app
+app->app:SpringApplicationRunListener.environmentPrepared
+app->configFile:onApplicationEvent
+deactivate app
+activate configFile
+
+configFile->configFile:从spring.factories获取EnvironmentPostProcessor
+configFile->configFile :遍历执行postProcessEnvironment
+alt apollo.bootstrap.eagerLoad.enabled=true 加载时机
+activate apollo
+configFile->apollo:postProcessEnvironment
+deactivate configFile
+apollo->apollo: 判断 apollo.bootstrap.eagerLoad.enabled是否为true
+apollo->apollo: 判断是否开启apollo.bootstrap.enabled
+apollo->apollo: 怕的environment是否存在名字为ApolloBootstrapPropertySources 避免重复加载
+apollo->apollo: 从环境变量获取加载配置pollo.bootstrap.namespaces多个,号隔开如:apollo.bootstrap.namespaces=application.yml
+activate configService
+apollo->configService:循环遍历namespace configService:getConfig(namespace) 触发加载
+deactivate apollo
+configService->configService:java SPI方式获取ConfigManager默认为DefaultConfigManager
+activate manager
+configService->manager:manager.getConfig
+deactivate configService
+manager->manager:根据namespace获取ConfigFactory默认为DefaultConfigFactory
+activate factory
+manager->factory:DefaultConfigFactory.createConfigFile
+deactivate manager
+factory->factory:构建ConfigRepository\n构建 RemoteConfigRepository构造函数会触发加载apollo配置\n构建 LocalFileConfigRepository构造函数传入RemoteConfigRepository，构造函数会触发加载本地缓存\n根据namespace后缀格式创建对应的ConfigFile并传入Repository如ymlConfigFile
+
+
+
+
+
+
+deactivate factory
+end
+@enduml
