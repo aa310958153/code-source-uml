@@ -15,7 +15,7 @@ configFile->configFile:从spring.factories获取EnvironmentPostProcessor
 configFile->configFile :遍历执行postProcessEnvironment
 alt apollo.bootstrap.eagerLoad.enabled=true 加载时机
 activate apollo
-configFile->apollo:postProcessEnvironment
+configFile->apollo:ApolloApplicationContextInitializer.postProcessEnvironment
 deactivate configFile
 apollo->apollo: 判断 apollo.bootstrap.eagerLoad.enabled是否为true
 apollo->apollo: 判断是否开启apollo.bootstrap.enabled
