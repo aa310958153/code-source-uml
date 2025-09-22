@@ -37,7 +37,7 @@ apollo:
 @EnableApolloConfig
 ```
 ## 动态修改原理
-- 启动时缓存所有字段和set方法元数据信息
+- 启动时缓存针对@Value所有字段和set方法元数据信息
 ```text
 com.ctrip.framework.apollo.spring.annotation.ApolloProcessor#postProcessBeforeInitialization
 ->
@@ -61,8 +61,10 @@ com.ctrip.framework.apollo.internals.LocalFileConfigRepository#persistLocalCache
 com.ctrip.framework.apollo.internals.AbstractConfigFile#onRepositoryChange
 com.ctrip.framework.apollo.spring.property.AutoUpdateConfigChangeListener#onChange
 ```
-- 监听非value方式可以采用这种方式， 
+- 监听非@value方式可以采用这种方式，案例一
+  本质也是利用spring boot刷新环境变量
 ```java
+
 
   /**
      * 监听apollo配置，实现网关路由动态更新 这里统一发送事件com.ctrip.framework.apollo.internals.DefaultConfig#onRepositoryChange
@@ -72,6 +74,54 @@ com.ctrip.framework.apollo.spring.property.AutoUpdateConfigChangeListener#onChan
     @ApolloConfigChangeListener(value = "application.yml", interestedKeyPrefixes = "spring.cloud.gateway.")
     public void onChange(ConfigChangeEvent changeEvent) {
         refreshGatewayProperties(changeEvent);
+    }
+
+    /**
+     * 刷新路由
+     *
+     * @param changeEvent 更新事件
+     */
+    private void refreshGatewayProperties(ConfigChangeEvent changeEvent) {
+        this.applicationContext.publishEvent(new EnvironmentChangeEvent(changeEvent.changedKeys()));
+        refreshGatewayRouteDefinition();
+    }
+
+    /**
+     * 刷新路由
+     */
+    private void refreshGatewayRouteDefinition() {
+        this.publisher.publishEvent(new RefreshRoutesEvent(this));
+    }
+```
+- 案例二
+本质也是利用spring boot刷新环境变量
+```text
+@Getter
+@Setter
+@Component
+@ConfigurationProperties(prefix = "clod-chain")
+public class ColdChainConfig {
+
+    /**
+     * /** 冷链平台查询接口地址
+     */
+    private String queryUrl;
+}
+
+    @ApolloConfigChangeListener({"application", "application.yml", "bizconfig", "hydee.common", "common"})
+    protected void changeHandler(ConfigChangeEvent changeEvent) {
+        Iterator var2 = changeEvent.changedKeys().iterator();
+
+        while(var2.hasNext()) {
+            String key = (String)var2.next();
+            ConfigChange change = changeEvent.getChange(key);
+            log.info("Apollo config change - {}", change.toString());
+            if (key.startsWith("logging.level") && PropertyChangeType.DELETED.equals(change.getChangeType())) {
+                this.modifyLogLevel(key, changeEvent);
+            }
+        }
+
+        this.applicationContext.publishEvent(new EnvironmentChangeEvent(changeEvent.changedKeys()));
     }
 ```
 # 运维相关
