@@ -1,0 +1,88 @@
+<mxfile host="drawio-plugin" modified="2026-03-19T09:00:59.975Z" agent="Mozilla/5.0 (Android 6.0)" version="22.1.22" etag="LXmAIXGJt1HGpF2nrYpJ" type="embed">
+  <diagram id="LLY3F_M9W9BOEPOMLS5D" name="Page-1">
+    <mxGraphModel dx="1072" dy="752" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1100" pageHeight="850" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="2" value="Host 主机应用&#xa;(Claude Desktop / Cursor IDE)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;arcSize=20;" parent="1" vertex="1">
+          <mxGeometry x="50" y="50" width="800" height="330" as="geometry" />
+        </mxCell>
+        <mxCell id="3" value="🧠 AI 模型&#xa;决策者&#xa;理解意图、决定调用工具" style="ellipse;whiteSpace=wrap;html=1;fillColor=#667eea;strokeColor=#667eea;fontColor=#ffffff;" parent="1" vertex="1">
+          <mxGeometry x="100" y="100" width="150" height="100" as="geometry" />
+        </mxCell>
+        <mxCell id="4" value="🌉 MCP Client&#xa;桥梁/中间人&#xa;发现工具 | 翻译格式 | 转发调用" style="ellipse;whiteSpace=wrap;html=1;fillColor=#764ba2;strokeColor=#764ba2;fontColor=#ffffff;" parent="1" vertex="1">
+          <mxGeometry x="350" y="100" width="150" height="100" as="geometry" />
+        </mxCell>
+        <mxCell id="5" value="⚙️ MCP Server&#xa;能力提供者&#xa;暴露工具 | 执行操作 | 返回结果" style="ellipse;whiteSpace=wrap;html=1;fillColor=#f59e0b;strokeColor=#f59e0b;fontColor=#ffffff;" parent="1" vertex="1">
+          <mxGeometry x="600" y="100" width="150" height="100" as="geometry" />
+        </mxCell>
+        <mxCell id="6" value="外部工具/数据源" style="ellipse;whiteSpace=wrap;html=1;fillColor=#10b981;strokeColor=#10b981;fontColor=#ffffff;" parent="1" vertex="1">
+          <mxGeometry x="880" y="100" width="120" height="100" as="geometry" />
+        </mxCell>
+        <mxCell id="7" value="" style="endArrow=classic;html=1;exitX=1;exitY=0.5;entryX=0;entryY=0.5;strokeColor=#666666;strokeWidth=2;" parent="1" source="3" target="4" edge="1">
+          <mxGeometry width="50" height="100" relative="1" as="geometry">
+            <mxPoint x="260" y="160" as="sourcePoint" />
+            <mxPoint x="340" y="160" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="8" value="发送意图" style="text;html=1;resizable=0;points=[];align=center;verticalAlign=middle;labelBackgroundColor=#ffffff;fontSize=10;" parent="7" vertex="1" connectable="0">
+          <mxGeometry x="-0.22" relative="1" as="geometry">
+            <mxPoint as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="9" value="" style="endArrow=classic;html=1;exitX=1;exitY=0.5;entryX=0;entryY=0.5;strokeColor=#666666;strokeWidth=2;" parent="1" source="4" target="5" edge="1">
+          <mxGeometry width="50" height="100" relative="1" as="geometry">
+            <mxPoint x="510" y="160" as="sourcePoint" />
+            <mxPoint x="590" y="160" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="10" value="转发调用" style="text;html=1;resizable=0;points=[];align=center;verticalAlign=middle;labelBackgroundColor=#ffffff;fontSize=10;" parent="9" vertex="1" connectable="0">
+          <mxGeometry x="-0.22" relative="1" as="geometry">
+            <mxPoint as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="11" value="" style="endArrow=classic;html=1;exitX=1;exitY=0.5;entryX=0;entryY=0.5;strokeColor=#666666;strokeWidth=2;" parent="1" source="5" target="6" edge="1">
+          <mxGeometry width="50" height="100" relative="1" as="geometry">
+            <mxPoint x="760" y="160" as="sourcePoint" />
+            <mxPoint x="840" y="160" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="12" value="提供能力" style="text;html=1;resizable=0;points=[];align=center;verticalAlign=middle;labelBackgroundColor=#ffffff;fontSize=10;" parent="11" vertex="1" connectable="0">
+          <mxGeometry x="-0.22" relative="1" as="geometry">
+            <mxPoint as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="13" value="" style="endArrow=dashed;html=1;exitX=0.5;exitY=0;strokeColor=#999999;strokeWidth=2;dashed=1;" parent="1" source="4" edge="1">
+          <mxGeometry width="50" height="100" relative="1" as="geometry">
+            <mxPoint x="420" y="90" as="sourcePoint" />
+            <mxPoint x="175" y="90" as="targetPoint" />
+            <Array as="points">
+              <mxPoint x="425" y="60" />
+              <mxPoint x="175" y="60" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="14" value="不直接连接" style="text;html=1;resizable=0;points=[];align=center;verticalAlign=middle;labelBackgroundColor=#ffffff;fontSize=10;fontColor=#ff0000;" parent="13" vertex="1" connectable="0">
+          <mxGeometry x="-0.22" relative="1" as="geometry">
+            <mxPoint as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="15" value="MCP 架构角色图" style="text;html=1;resizable=0;points=[];autosize=1;align=left;verticalAlign=top;spacingTop=-4;fontSize=18;fontStyle=1" parent="1" vertex="1">
+          <mxGeometry x="50" y="20" width="130" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="16" value="图例说明" style="text;html=1;resizable=0;points=[];autosize=1;align=left;verticalAlign=top;spacingTop=-4;fontSize=14;fontStyle=1" parent="1" vertex="1">
+          <mxGeometry x="100" y="250" width="80" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="17" value="AI 模型：负责理解用户意图，决定需要调用哪个工具" style="text;html=1;resizable=0;points=[];autosize=1;align=left;verticalAlign=top;spacingTop=-4;fontSize=11;" parent="1" vertex="1">
+          <mxGeometry x="100" y="280" width="310" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="18" value="MCP Client：从 Server 发现工具，翻译成 AI 能理解的格式，AI 要调用时转发给 Server" style="text;html=1;resizable=0;points=[];autosize=1;align=left;verticalAlign=top;spacingTop=-4;fontSize=11;" parent="1" vertex="1">
+          <mxGeometry x="100" y="310" width="520" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="19" value="MCP Server：暴露工具、资源等能力，接收调用请求并返回结果" style="text;html=1;resizable=0;points=[];autosize=1;align=left;verticalAlign=top;spacingTop=-4;fontSize=11;" parent="1" vertex="1">
+          <mxGeometry x="100" y="340" width="420" height="20" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

@@ -1,0 +1,729 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MCP 架构与交互流程图解</title>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            overflow: hidden;
+        }
+
+        header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 40px;
+            text-align: center;
+        }
+
+        header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+
+        header p {
+            font-size: 1.2em;
+            opacity: 0.95;
+        }
+
+        .content {
+            padding: 40px;
+        }
+
+        .section {
+            margin-bottom: 60px;
+        }
+
+        .section h2 {
+            color: #667eea;
+            font-size: 2em;
+            margin-bottom: 20px;
+            border-bottom: 3px solid #667eea;
+            padding-bottom: 10px;
+        }
+
+        .section h3 {
+            color: #764ba2;
+            font-size: 1.5em;
+            margin: 30px 0 15px 0;
+        }
+
+        .diagram-container {
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 30px;
+            margin: 20px 0;
+            box-shadow: inset 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .mermaid {
+            display: flex;
+            justify-content: center;
+            margin: 20px 0;
+        }
+
+        .info-box {
+            background: linear-gradient(135deg, #667eea15 0%, #764ba215 100%);
+            border-left: 5px solid #667eea;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 5px;
+        }
+
+        .info-box strong {
+            color: #667eea;
+        }
+
+        .comparison-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+
+        .comparison-table th {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 15px;
+            text-align: left;
+        }
+
+        .comparison-table td {
+            padding: 12px;
+            border-bottom: 1px solid #e0e0e0;
+        }
+
+        .comparison-table tr:hover {
+            background: #f5f5f5;
+        }
+
+        .code-block {
+            background: #2d2d2d;
+            color: #f8f8f2;
+            padding: 20px;
+            border-radius: 8px;
+            overflow-x: auto;
+            margin: 20px 0;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9em;
+            line-height: 1.5;
+        }
+
+        .highlight {
+            background: #fff3cd;
+            border-left: 5px solid #ffc107;
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 5px;
+        }
+
+        .step-flow {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            margin: 20px 0;
+        }
+
+        .step {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+            position: relative;
+        }
+
+        .step::before {
+            content: '📍';
+            margin-right: 10px;
+        }
+
+        .role-card {
+            display: inline-block;
+            background: white;
+            border: 3px solid #667eea;
+            border-radius: 15px;
+            padding: 20px;
+            margin: 10px;
+            min-width: 250px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+        }
+
+        .role-card h4 {
+            color: #667eea;
+            margin-bottom: 10px;
+        }
+
+        .nav-tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+
+        .nav-tab {
+            padding: 12px 24px;
+            background: #e0e0e0;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 1em;
+            transition: all 0.3s;
+        }
+
+        .nav-tab:hover {
+            background: #d0d0d0;
+        }
+
+        .nav-tab.active {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        @media (max-width: 768px) {
+            header h1 {
+                font-size: 1.8em;
+            }
+            
+            .content {
+                padding: 20px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🔌 Model Context Protocol (MCP)</h1>
+            <p>从概念、架构、协议格式到裸协议实现，彻底搞懂 MCP 的本质</p>
+        </header>
+
+        <div class="content">
+            <!-- 第一部分：MCP 是什么 -->
+            <div class="section">
+                <h2>一、MCP 是什么？</h2>
+                
+                <div class="info-box">
+                    <strong>💡 一句话概括：</strong><br>
+                    MCP 定义了一套统一的接口规范，让 AI 模型能以标准化的方式发现并调用外部能力。
+                </div>
+
+                <h3>为什么需要 MCP？</h3>
+                <p>MCP 被比作 <strong>"AI 的 USB-C 接口"</strong> —— USB-C 让所有设备用同一种接口连接外设，MCP 让所有 AI 应用用同一种协议连接工具。</p>
+
+                <div class="diagram-container">
+                    <h4 style="text-align: center; margin-bottom: 20px;">MCP 出现前 vs 出现后</h4>
+                    <div class="mermaid">
+graph TB
+    subgraph Before["❌ MCP 出现之前 - 混乱的集成"]
+        A1[AI 应用 A] --> C1[自定义集成代码 1]
+        A2[AI 应用 B] --> C2[自定义集成代码 2]
+        A3[AI 应用 C] --> C3[自定义集成代码 3]
+        C1 --> T1[工具 X]
+        C2 --> T1
+        C3 --> T1
+    end
+
+    subgraph After["✅ MCP 出现之后 - 标准化"]
+        B1[AI 应用 A] --> M1[MCP Client]
+        B2[AI 应用 B] --> M1
+        B3[AI 应用 C] --> M1
+        M1 --> MS[MCP Server]
+        MS --> T2[工具 X]
+    end
+
+    Before -.->|进化 | After
+                    </div>
+                </div>
+            </div>
+
+            <!-- 第二部分：架构角色 -->
+            <div class="section">
+                <h2>二、MCP 架构：三个核心角色</h2>
+
+                <div style="text-align: center; margin: 30px 0;">
+                    <div class="role-card">
+                        <h4>🧠 AI 模型</h4>
+                        <p><strong>决策者</strong></p>
+                        <p>负责理解用户意图、决定调用哪个工具</p>
+                        <small>如 Claude、GPT</small>
+                    </div>
+
+                    <div class="role-card">
+                        <h4>🌉 MCP Client</h4>
+                        <p><strong>桥梁/中间人</strong></p>
+                        <p>- 从 Server 发现工具<br>- 翻译成 AI 能理解的格式<br>- AI 要调用时转发给 Server</p>
+                    </div>
+
+                    <div class="role-card">
+                        <h4>⚙️ MCP Server</h4>
+                        <p><strong>能力提供者</strong></p>
+                        <p>- 暴露工具、资源等能力<br>- 接收调用请求并返回结果</p>
+                    </div>
+                </div>
+
+                <div class="diagram-container">
+                    <h4 style="text-align: center; margin-bottom: 20px;">角色关系图</h4>
+                    <div class="mermaid">
+graph TB
+    H[Host 主机应用<br/>如 Claude Desktop / Cursor IDE]
+
+    subgraph Host_Container [Host 内部]
+        AI[🧠 AI 模型]
+        MC[MCP Client]
+    end
+
+    MS[MCP Server]
+    T[外部工具/数据源]
+
+    H --> AI
+    H --> MC
+    AI -.->|不直接连接 | MS
+    AI -->|发送意图 | MC
+    MC -->|转发调用 | MS
+    MS -->|提供能力 | T
+
+    style AI fill:#667eea,color:white
+    style MC fill:#764ba2,color:white
+    style MS fill:#f59e0b,color:white
+    style T fill:#10b981,color:white
+                    </div>
+                </div>
+
+                <div class="highlight">
+                    <strong>⚠️ 重要：</strong>AI 不直接连 Server，Client 是中间人！
+                </div>
+            </div>
+
+            <!-- 第三部分：三大核心能力 -->
+            <div class="section">
+                <h2>三、三大核心能力</h2>
+
+                <table class="comparison-table">
+                    <thead>
+                        <tr>
+                            <th>能力</th>
+                            <th>类型</th>
+                            <th>用途</th>
+                            <th>示例</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>Tools（工具）</strong></td>
+                            <td>POST 端点</td>
+                            <td>执行操作，有副作用</td>
+                            <td>发邮件、查天气、写文件</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Resources（资源）</strong></td>
+                            <td>GET 端点</td>
+                            <td>提供数据，只读</td>
+                            <td>读取文件、查询数据库记录</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Prompts（提示词）</strong></td>
+                            <td>模板</td>
+                            <td>预定义的交互模板</td>
+                            <td>代码审查模板、翻译模板</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <div class="info-box">
+                    <strong>💡 提示：</strong>Tools 是最常用的，大多数 MCP Server 只实现 Tools 就够了。
+                </div>
+            </div>
+
+            <!-- 第四部分：交互流程 -->
+            <div class="section">
+                <h2>四、完整交互流程：三个阶段</h2>
+
+                <div class="step-flow">
+                    <div class="step">
+                        <strong>第一阶段：握手 🤝</strong><br>
+                        Client 和 Server 先"认识一下"，交换各自的能力
+                    </div>
+                    <div class="step">
+                        <strong>第二阶段：发现 🔍</strong><br>
+                        Client 根据握手结果，去查询具体有哪些工具可用
+                    </div>
+                    <div class="step">
+                        <strong>第三阶段：调用 🚀</strong><br>
+                        用户提问，AI 分析后决定调用某个工具，Client 转发执行
+                    </div>
+                </div>
+
+                <div class="diagram-container">
+                    <h4 style="text-align: center; margin-bottom: 20px;">三阶段完整流程图</h4>
+                    <div class="mermaid">
+sequenceDiagram
+    participant U as 用户
+    participant AI as AI 模型
+    participant C as MCP Client
+    participant S as MCP Server
+
+    Note over AI,S: 第一阶段：握手 🤝
+    C->>S: initialize (我是谁)
+    S-->>C: 返回能力声明 (tools: {})
+    C->>S: notifications/initialized
+
+    Note over AI,S: 第二阶段：发现 🔍
+    C->>S: tools/list (你有哪些工具？)
+    S-->>C: 返回工具列表
+    C->>AI: 转换工具格式给 AI
+
+    Note over AI,S: 第三阶段：调用 🚀
+    U->>AI: "北京天气怎么样？"
+    AI->>AI: 分析：调用 get_weather(北京)
+    AI->>C: 决定调用工具
+    C->>S: tools/call (name=get_weather, city=北京)
+    S-->>C: 返回结果 (晴天 25°C)
+    C->>AI: 传递结果
+    AI->>U: "北京今天晴天 25°C"
+
+    Note over AI,S: 后续调用
+    U->>AI: "上海呢？"
+    AI->>C: 调用 get_weather(上海)
+    C->>S: tools/call (上海)
+    S-->>C: 返回 (多云 22°C)
+    AI->>U: "上海多云 22°C"
+                    </div>
+                </div>
+
+                <div class="diagram-container">
+                    <h4 style="text-align: center; margin-bottom: 20px;">详细调用序列图（含消息格式）</h4>
+                    <div class="mermaid">
+sequenceDiagram
+    participant C as Client
+    participant S as Server
+
+    rect rgb(102, 126, 234, 0.1)
+        Note over C,S: 第一阶段：握手
+        C->>S: POST /mcp<br/>{method:"initialize",<br/>protocolVersion:"2025-03-26"}
+        S-->>C: {capabilities:{tools:{}},<br/>serverInfo:{name:"my-server"}}
+        C->>S: POST /mcp<br/>{method:"notifications/initialized"}
+    end
+
+    rect rgb(118, 75, 162, 0.1)
+        Note over C,S: 第二阶段：发现工具
+        C->>S: POST /mcp<br/>{method:"tools/list"}
+        S-->>C: {tools:[{name:"get_weather",<br/>inputSchema:{...}}]}
+    end
+
+    rect rgb(245, 158, 11, 0.1)
+        Note over C,S: 第三阶段：调用
+        C->>S: POST /mcp<br/>{method:"tools/call",<br/>name:"get_weather",<br/>arguments:{city:"北京"}}
+        S-->>C: {content:[{type:"text",<br/>text:"晴天 25°C"}]}
+    end
+                    </div>
+                </div>
+            </div>
+
+            <!-- 第五部分：协议格式 -->
+            <div class="section">
+                <h2>五、协议格式：一个端点 + JSON-RPC</h2>
+
+                <div class="info-box">
+                    <strong>🎯 核心机制：</strong><br>
+                    所有请求都发到同一个地方：<code>POST /mcp</code><br>
+                    靠消息体里的 <code>method</code> 字段路由
+                </div>
+
+                <div class="diagram-container">
+                    <h4 style="text-align: center; margin-bottom: 20px;">协议路由机制</h4>
+                    <div class="mermaid">
+graph LR
+    A[所有请求] --> B[POST /mcp]
+    B --> C{method 字段}
+    C -->|"initialize"| D[handle_initialize]
+    C -->|"tools/list"| E[handle_tools_list]
+    C -->|"tools/call"| F[handle_tools_call]
+    C -->|"notifications/*"| G[通知处理]
+    
+    style B fill:#667eea,color:white
+    style C fill:#f59e0b,color:white
+                    </div>
+                </div>
+
+                <h3>通用信封格式</h3>
+                <div class="code-block">
+{
+  "jsonrpc": "2.0",      // 固定版本
+  "id": 1,               // 请求 ID（通知无 id）
+  "method": "xxx",       // 方法名
+  "params": {}           // 参数 / result: 结果
+}
+                </div>
+
+                <h3>核心协议消息示例</h3>
+                
+                <div class="nav-tabs">
+                    <button class="nav-tab active" onclick="showTab('init')">initialize</button>
+                    <button class="nav-tab" onclick="showTab('list')">tools/list</button>
+                    <button class="nav-tab" onclick="showTab('call')">tools/call</button>
+                </div>
+
+                <div id="init" class="tab-content active">
+                    <div class="code-block">
+// 请求
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "method": "initialize",
+  "params": {
+    "protocolVersion": "2025-03-26",
+    "capabilities": {},
+    "clientInfo": {"name": "my-client", "version": "1.0"}
+  }
+}
+
+// 响应
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "result": {
+    "protocolVersion": "2025-03-26",
+    "capabilities": {"tools": {}},
+    "serverInfo": {"name": "my-server", "version": "1.0"}
+  }
+}
+                    </div>
+                </div>
+
+                <div id="list" class="tab-content">
+                    <div class="code-block">
+// 请求
+{
+  "jsonrpc": "2.0",
+  "id": 2,
+  "method": "tools/list",
+  "params": {}
+}
+
+// 响应
+{
+  "jsonrpc": "2.0",
+  "id": 2,
+  "result": {
+    "tools": [{
+      "name": "get_weather",
+      "description": "获取指定城市的天气",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "city": {"type": "string", "description": "城市名称"}
+        },
+        "required": ["city"]
+      }
+    }]
+  }
+}
+                    </div>
+                </div>
+
+                <div id="call" class="tab-content">
+                    <div class="code-block">
+// 请求
+{
+  "jsonrpc": "2.0",
+  "id": 3,
+  "method": "tools/call",
+  "params": {
+    "name": "get_weather",
+    "arguments": {"city": "北京"}
+  }
+}
+
+// 响应
+{
+  "jsonrpc": "2.0",
+  "id": 3,
+  "result": {
+    "content": [{"type": "text", "text": "晴天 25°C"}]
+  }
+}
+                    </div>
+                </div>
+            </div>
+
+            <!-- 第六部分：JSON-RPC 补充 -->
+            <div class="section">
+                <h2>六、补充：JSON-RPC 2.0 标准</h2>
+
+                <div class="info-box">
+                    <strong>📚 JSON-RPC 2.0</strong> 是一个已有的开放标准，和 MCP 无关。<br>
+                    MCP 聪明地借用了这个成熟标准，只需要定义具体的 method 有哪些，以及它们的 params 和 result 格式。
+                </div>
+
+                <div class="diagram-container">
+                    <h4 style="text-align: center; margin-bottom: 20px;">JSON-RPC 三种消息类型</h4>
+                    <div class="mermaid">
+graph TB
+    A[JSON-RPC 2.0] --> B[Request<br/>有 id, 期望响应]
+    A --> C[Response<br/>对应某个 request]
+    A --> D[Notification<br/>没有 id, 不期望响应]
+
+    B --> B1[{"jsonrpc":"2.0",<br/>"id":1,<br/>"method":"xxx"}]
+    C --> C1[{"jsonrpc":"2.0",<br/>"id":1,<br/>"result":{...}}]
+    D --> D1[{"jsonrpc":"2.0",<br/>"method":"xxx"}]
+
+    style A fill:#667eea,color:white
+    style B fill:#764ba2,color:white
+    style C fill:#f59e0b,color:white
+    style D fill:#10b981,color:white
+                    </div>
+                </div>
+            </div>
+
+            <!-- 第七部分：总结 -->
+            <div class="section">
+                <h2>七、总结回顾</h2>
+
+                <div class="diagram-container">
+                    <h4 style="text-align: center; margin-bottom: 20px;">MCP 核心要点总览</h4>
+                    <div class="mermaid">
+mindmap
+  root((MCP))
+    核心价值
+      标准化接口
+      解耦 AI 与工具
+      可扩展
+      互操作性
+    三个角色
+      AI 模型
+      Client 中间人
+      Server 执行者
+    三个阶段
+      握手
+      发现
+      调用
+    协议格式
+      JSON-RPC 2.0
+      POST /mcp
+      method 路由
+    三大能力
+      Tools 最常用
+      Resources
+      Prompts
+                    </div>
+                </div>
+
+                <div class="info-box">
+                    <strong>🎯 关键要点回顾：</strong><br><br>
+                    ✅ MCP = AI 的 USB-C 接口<br>
+                    ✅ 三个角色：AI 模型 → Client（中间人）→ Server<br>
+                    ✅ 三个阶段：握手 → 发现 → 调用<br>
+                    ✅ 一个端点：所有请求发到 <code>/mcp</code>，靠 <code>method</code> 字段路由<br>
+                    ✅ 信封格式：JSON-RPC 2.0<br>
+                    ✅ 三大能力：Tools（最常用）、Resources、Prompts
+                </div>
+
+                <h3>学习路线建议</h3>
+                <div class="step-flow">
+                    <div class="step">
+                        <strong>1️⃣ 理解协议本质</strong><br>
+                        先搞懂 JSON-RPC 和三个阶段的交互
+                    </div>
+                    <div class="step">
+                        <strong>2️⃣ 手写实现</strong><br>
+                        用最原始的 HTTP 代码实现 Server 和 Client，看清协议的本质
+                    </div>
+                    <div class="step">
+                        <strong>3️⃣ 使用 SDK</strong><br>
+                        理解底层后再用 SDK，就知道它帮你封装了什么
+                    </div>
+                </div>
+            </div>
+
+            <!-- 第八部分：实战代码链接 -->
+            <div class="section">
+                <h2>八、实战代码</h2>
+                <p>详细的 MCP Server 和 Client 手写实现代码，请参考：</p>
+                <div class="info-box">
+                    <strong>📄 <a href="MCP 完整指南.md" target="_blank" style="color: #667eea;">MCP 完整指南.md</a></strong><br><br>
+                    包含完整的 Python 代码实现：<br>
+                    • 纯 HTTP 实现的 MCP Server（Flask）<br>
+                    • 纯 HTTP 实现的 MCP Client（requests）<br>
+                    • 使用官方 SDK 的简化写法<br>
+                    • stdio 模式注意事项
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 初始化 Mermaid
+        mermaid.initialize({
+            startOnLoad: true,
+            theme: 'default',
+            flowchart: {
+                useMaxWidth: true,
+                htmlLabels: true,
+                curve: 'basis'
+            },
+            sequence: {
+                useMaxWidth: true,
+                diagramMarginX: 50,
+                diagramMarginY: 10,
+                actorMargin: 50,
+                width: 150,
+                height: 65,
+                boxMargin: 10
+            }
+        });
+
+        // Tab 切换函数
+        function showTab(tabId) {
+            // 隐藏所有 tab 内容
+            document.querySelectorAll('.tab-content').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            
+            // 移除所有 tab 按钮的 active 状态
+            document.querySelectorAll('.nav-tab').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            
+            // 显示目标 tab
+            document.getElementById(tabId).classList.add('active');
+            
+            // 激活对应按钮
+            event.target.classList.add('active');
+        }
+
+        // 页面加载完成后的回调
+        window.addEventListener('load', () => {
+            console.log('MCP 流程图已加载完成');
+        });
+    </script>
+</body>
+</html>
