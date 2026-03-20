@@ -1,0 +1,948 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>一心数科 MCP Server 架构设计分享</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Microsoft YaHei', Arial, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            overflow: hidden;
+        }
+        
+        header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 40px;
+            text-align: center;
+        }
+        
+        header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+        
+        header p {
+            font-size: 1.2em;
+            opacity: 0.9;
+        }
+        
+        .content {
+            padding: 40px;
+        }
+        
+        section {
+            margin-bottom: 50px;
+        }
+        
+        h2 {
+            color: #667eea;
+            font-size: 2em;
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 3px solid #667eea;
+        }
+        
+        h3 {
+            color: #764ba2;
+            font-size: 1.5em;
+            margin: 25px 0 15px 0;
+        }
+        
+        .diagram-container {
+            background: #f8f9fa;
+            border: 2px solid #e9ecef;
+            border-radius: 10px;
+            padding: 30px;
+            margin: 20px 0;
+            overflow-x: auto;
+        }
+        
+        .explanation {
+            background: #fff3cd;
+            border-left: 5px solid #ffc107;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 5px;
+        }
+        
+        .explanation h4 {
+            color: #856404;
+            margin-bottom: 10px;
+            font-size: 1.2em;
+        }
+        
+        .highlight-box {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin: 20px 0;
+        }
+        
+        .box {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 25px;
+            border-radius: 10px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+            transition: transform 0.3s ease;
+        }
+        
+        .box:hover {
+            transform: translateY(-5px);
+        }
+        
+        .box h4 {
+            font-size: 1.3em;
+            margin-bottom: 10px;
+        }
+        
+        .box ul {
+            list-style: none;
+            padding-left: 20px;
+        }
+        
+        .box ul li {
+            margin: 8px 0;
+            position: relative;
+        }
+        
+        .box ul li:before {
+            content: "✓ ";
+            font-weight: bold;
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        
+        th, td {
+            padding: 15px;
+            text-align: left;
+            border: 1px solid #dee2e6;
+        }
+        
+        th {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            font-weight: bold;
+        }
+        
+        tr:nth-child(even) {
+            background: #f8f9fa;
+        }
+        
+        tr:hover {
+            background: #e9ecef;
+        }
+        
+        .flow-chart {
+            display: flex;
+            justify-content: space-around;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 20px;
+            margin: 30px 0;
+            padding: 30px;
+            background: #f8f9fa;
+            border-radius: 10px;
+        }
+        
+        .flow-step {
+            background: white;
+            border: 3px solid #667eea;
+            border-radius: 10px;
+            padding: 20px;
+            min-width: 200px;
+            text-align: center;
+            box-shadow: 0 3px 10px rgba(0,0,0,0.1);
+            position: relative;
+        }
+        
+        .flow-step::after {
+            content: "→";
+            position: absolute;
+            right: -30px;
+            top: 50%;
+            transform: translateY(-50%);
+            font-size: 2em;
+            color: #667eea;
+            font-weight: bold;
+        }
+        
+        .flow-step:last-child::after {
+            display: none;
+        }
+        
+        .step-number {
+            display: inline-block;
+            background: #667eea;
+            color: white;
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            text-align: center;
+            line-height: 30px;
+            margin-bottom: 10px;
+            font-weight: bold;
+        }
+        
+        .code-block {
+            background: #2d2d2d;
+            color: #f8f8f2;
+            padding: 20px;
+            border-radius: 10px;
+            overflow-x: auto;
+            margin: 20px 0;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9em;
+            line-height: 1.5;
+        }
+        
+        .note {
+            background: #d1ecf1;
+            border-left: 5px solid #17a2b8;
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 5px;
+        }
+        
+        .note strong {
+            color: #0c5460;
+        }
+        
+        footer {
+            background: #f8f9fa;
+            text-align: center;
+            padding: 20px;
+            color: #6c757d;
+            border-top: 2px solid #dee2e6;
+        }
+        
+        @media print {
+            body {
+                background: white;
+                padding: 0;
+            }
+            
+            .container {
+                box-shadow: none;
+            }
+            
+            .box {
+                break-inside: avoid;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🚀 一心数科 MCP Server 架构设计</h1>
+            <p>基于 MCP 协议的企业级 AI 工具服务平台化解决方案</p>
+            <p style="margin-top: 10px; font-size: 1em;">技术分享文档 | 2024 年</p>
+        </header>
+        
+        <div class="content">
+            <!-- 第一部分：背景与目标 -->
+            <section>
+                <h2>📋 一、项目背景与目标</h2>
+                
+                <h3>1.1 业务背景</h3>
+                <p>随着 AI 智能体的发展，传统大模型虽能根据输入生成响应，但在实际应用中仍难以基于现有业务数据与功能灵活满足用户需求，亟需 MCP 提供辅助支持。</p>
+                
+                <div class="explanation">
+                    <h4>💡 核心痛点</h4>
+                    <ul>
+                        <li><strong>缺乏对业务数据的有效利用：</strong>无法基于企业已有数据进行个性化输出</li>
+                        <li><strong>与业务功能集成不足：</strong>难以调用系统内具体功能模块来满足用户的真实业务诉求</li>
+                    </ul>
+                </div>
+                
+                <h3>1.2 建设目标</h3>
+                <div class="highlight-box">
+                    <div class="box">
+                        <h4>🎯 本期目标</h4>
+                        <ul>
+                            <li>构建 MCP Server 工具发布底座</li>
+                            <li>屏蔽底层 MCP 协议细节</li>
+                            <li>支持工具快速接入与发布</li>
+                            <li>实现用户身份认证与权限控制</li>
+                            <li>落地 DevOps 助手、通义灵码插件、运营助手三大场景</li>
+                        </ul>
+                    </div>
+                    <div class="box">
+                        <h4>🔮 中长期目标</h4>
+                        <ul>
+                            <li>构建可视化 MCP Server 管理看板</li>
+                            <li>提升平台在工具治理、权限控制与版本发布等方面的运营能力</li>
+                            <li>支撑未来多场景、多角色的智能工具协同管理需求</li>
+                            <li>支持集群部署</li>
+                        </ul>
+                    </div>
+                </div>
+            </section>
+            
+            <!-- 第二部分：MCP 协议核心概念 -->
+            <section>
+                <h2>📚 二、MCP 协议核心概念</h2>
+                
+                <h3>2.1 什么是 MCP？</h3>
+                <p>MCP（Model Context Protocol）是由 Anthropic（Claude 开发公司）开发的开源协议，旨在让大型语言模型（LLM）能够以标准化的方式连接到外部数据源和工具。它就像 AI 应用的通用接口，帮助开发者构建更灵活、更具上下文感知能力的 AI 应用。</p>
+                
+                <div class="note">
+                    <strong>📌 形象比喻：</strong>MCP 被设计为一个通用接口，类似于 USB-C 端口，允许 LLM 应用以一致的方式连接到各种数据源和工具，如文件、数据库、API 等。
+                </div>
+                
+                <h3>2.2 三大核心角色</h3>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>角色</th>
+                            <th>职责</th>
+                            <th>典型代表</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>AI 模型 (LLM)</strong></td>
+                            <td>理解用户意图，决定调用哪个工具</td>
+                            <td>Claude、GPT-4、通义千问</td>
+                        </tr>
+                        <tr>
+                            <td><strong>MCP Client</strong></td>
+                            <td>从 Server 发现工具，翻译格式，转发调用</td>
+                            <td>Claude Desktop、Cursor IDE、通义灵码插件</td>
+                        </tr>
+                        <tr>
+                            <td><strong>MCP Server</strong></td>
+                            <td>暴露工具、资源等能力，接收调用请求并返回结果</td>
+                            <td>一心数科 mcp-server-deploy</td>
+                        </tr>
+                    </tbody>
+                </table>
+                
+                <h3>2.3 三大核心能力</h3>
+                <div class="highlight-box">
+                    <div class="box" style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);">
+                        <h4>🛠️ Tools（工具）</h4>
+                        <p>执行操作的能力，如查询商品信息、创建会议等。Client 可以 discovery 和 invoke。</p>
+                    </div>
+                    <div class="box" style="background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);">
+                        <h4>📖 Resources（资源）</h4>
+                        <p>提供只读的上下文信息，如文件内容、数据库记录等。类似 RAG 的外挂知识库。</p>
+                    </div>
+                    <div class="box" style="background: linear-gradient(135deg, #fa709a 0%, #fee140 100%);">
+                        <h4>📝 Prompts（模板）</h4>
+                        <p>预定义的交互模板，标准化常见任务，提高交互效率。</p>
+                    </div>
+                </div>
+            </section>
+            
+            <!-- 第三部分：整体架构设计 -->
+            <section>
+                <h2>🏗️ 三、整体架构设计</h2>
+                
+                <h3>3.1 架构全景图</h3>
+                <div class="diagram-container">
+                    <svg viewBox="0 0 1000 600" xmlns="http://www.w3.org/2000/svg" style="width: 100%; height: auto;">
+                        <!-- 背景 -->
+                        <rect width="1000" height="600" fill="#f8f9fa"/>
+                        
+                        <!-- MCP Client 层 -->
+                        <rect x="50" y="50" width="300" height="200" rx="15" fill="#dae8fc" stroke="#6c8ebf" stroke-width="3"/>
+                        <text x="200" y="80" text-anchor="middle" font-size="18" font-weight="bold" fill="#6c8ebf">MCP Client 层 (Host 主机)</text>
+                        
+                        <!-- Client 节点 -->
+                        <ellipse cx="120" cy="130" rx="80" ry="40" fill="#667eea"/>
+                        <text x="120" y="125" text-anchor="middle" font-size="12" fill="white" font-weight="bold">DevOps 助手</text>
+                        <text x="120" y="140" text-anchor="middle" font-size="10" fill="white">(ChatClient)</text>
+                        
+                        <ellipse cx="280" cy="130" rx="80" ry="40" fill="#764ba2"/>
+                        <text x="280" y="125" text-anchor="middle" font-size="12" fill="white" font-weight="bold">IntelliJ IDEA</text>
+                        <text x="280" y="140" text-anchor="middle" font-size="10" fill="white">通义灵码插件</text>
+                        
+                        <ellipse cx="200" cy="200" rx="80" ry="40" fill="#f59e0b"/>
+                        <text x="200" y="195" text-anchor="middle" font-size="12" fill="white" font-weight="bold">一心助手</text>
+                        <text x="200" y="210" text-anchor="middle" font-size="10" fill="white">运营助手 Agent</text>
+                        
+                        <!-- MCP Server 层 -->
+                        <rect x="450" y="50" width="350" height="200" rx="15" fill="#d5e8d4" stroke="#82b366" stroke-width="3"/>
+                        <text x="625" y="80" text-anchor="middle" font-size="18" font-weight="bold" fill="#82b366">MCP Server 层</text>
+                        
+                        <!-- Server 组件 -->
+                        <rect x="480" y="90" width="120" height="70" rx="10" fill="#10b981"/>
+                        <text x="540" y="115" text-anchor="middle" font-size="11" fill="white" font-weight="bold">MCP Server 核心</text>
+                        <text x="540" y="130" text-anchor="middle" font-size="9" fill="white">SSE 长连接管理</text>
+                        <text x="540" y="145" text-anchor="middle" font-size="9" fill="white">JSON-RPC 协议处理</text>
+                        
+                        <rect x="640" y="90" width="120" height="70" rx="10" fill="#3b82f6"/>
+                        <text x="700" y="115" text-anchor="middle" font-size="11" fill="white" font-weight="bold">统一鉴权</text>
+                        <text x="700" y="130" text-anchor="middle" font-size="9" fill="white">appId 识别</text>
+                        <text x="700" y="145" text-anchor="middle" font-size="9" fill="white">userId 解析 & 权限过滤</text>
+                        
+                        <rect x="560" y="180" width="120" height="60" rx="10" fill="#f97316"/>
+                        <text x="620" y="200" text-anchor="middle" font-size="11" fill="white" font-weight="bold">统一工具处理器</text>
+                        <text x="620" y="215" text-anchor="middle" font-size="9" fill="white">动态 Tool 生成</text>
+                        <text x="620" y="230" text-anchor="middle" font-size="9" fill="white">协议解析 & 结果返回</text>
+                        
+                        <!-- 业务服务层 -->
+                        <rect x="50" y="300" width="750" height="150" rx="15" fill="#ffe6cc" stroke="#d79b00" stroke-width="3"/>
+                        <text x="425" y="330" text-anchor="middle" font-size="18" font-weight="bold" fill="#d79b00">业务服务层 (微服务集群)</text>
+                        
+                        <!-- 业务服务 -->
+                        <rect x="80" y="350" width="100" height="60" rx="8" fill="#fbbf24"/>
+                        <text x="130" y="375" text-anchor="middle" font-size="10" fill="white" font-weight="bold">商品库存</text>
+                        <text x="130" y="395" text-anchor="middle" font-size="9" fill="white">微服务</text>
+                        
+                        <rect x="210" y="350" width="100" height="60" rx="8" fill="#fbbf24"/>
+                        <text x="260" y="375" text-anchor="middle" font-size="10" fill="white" font-weight="bold">会员营销</text>
+                        <text x="260" y="395" text-anchor="middle" font-size="9" fill="white">微服务</text>
+                        
+                        <rect x="340" y="350" width="100" height="60" rx="8" fill="#fbbf24"/>
+                        <text x="390" y="375" text-anchor="middle" font-size="10" fill="white" font-weight="bold">销售分析</text>
+                        <text x="390" y="395" text-anchor="middle" font-size="9" fill="white">微服务</text>
+                        
+                        <rect x="470" y="350" width="100" height="60" rx="8" fill="#fbbf24"/>
+                        <text x="520" y="375" text-anchor="middle" font-size="10" fill="white" font-weight="bold">考勤核查</text>
+                        <text x="520" y="395" text-anchor="middle" font-size="9" fill="white">微服务</text>
+                        
+                        <rect x="600" y="350" width="100" height="60" rx="8" fill="#fbbf24"/>
+                        <text x="650" y="375" text-anchor="middle" font-size="10" fill="white" font-weight="bold">奖惩单据</text>
+                        <text x="650" y="395" text-anchor="middle" font-size="9" fill="white">微服务</text>
+                        
+                        <!-- 基础设施 -->
+                        <rect x="850" y="100" width="120" height="80" rx="10" fill="#e0e0e0" stroke="#666" stroke-width="2"/>
+                        <text x="910" y="125" text-anchor="middle" font-size="11" fill="#333" font-weight="bold">Apollo</text>
+                        <text x="910" y="145" text-anchor="middle" font-size="9" fill="#666">配置中心</text>
+                        <text x="910" y="165" text-anchor="middle" font-size="9" fill="#666">mcp_resource.json</text>
+                        
+                        <rect x="850" y="350" width="120" height="60" rx="10" fill="#fee2e2" stroke="#ef4444" stroke-width="2"/>
+                        <text x="910" y="375" text-anchor="middle" font-size="11" fill="#ef4444" font-weight="bold">微服务网关</text>
+                        <text x="910" y="395" text-anchor="middle" font-size="9" fill="#666">JWT 鉴权</text>
+                        
+                        <ellipse cx="910" cy="70" rx="60" ry="35" fill="#a78bfa"/>
+                        <text x="910" y="65" text-anchor="middle" font-size="11" fill="white" font-weight="bold">LLM</text>
+                        <text x="910" y="80" text-anchor="middle" font-size="9" fill="white">大模型</text>
+                        
+                        <!-- 连接线 -->
+                        <!-- Client -> Server -->
+                        <path d="M 350 150 L 470 150" stroke="#666" stroke-width="2" marker-end="url(#arrowhead)"/>
+                        <text x="410" y="140" text-anchor="middle" font-size="9" fill="#666">SSE 长连接</text>
+                        <text x="410" y="155" text-anchor="middle" font-size="9" fill="#666">tools/list, tools/call</text>
+                        
+                        <!-- Server 内部流转 -->
+                        <path d="M 600 125 L 630 125" stroke="#666" stroke-width="2" marker-end="url(#arrowhead)"/>
+                        <text x="615" y="115" text-anchor="middle" font-size="8" fill="#666">sessionId</text>
+                        
+                        <path d="M 540 160 L 560 180" stroke="#666" stroke-width="2" marker-end="url(#arrowhead)"/>
+                        
+                        <!-- Server -> Biz -->
+                        <path d="M 620 240 L 620 270 L 130 270 L 130 340" stroke="#666" stroke-width="2" marker-end="url(#arrowhead)" fill="none"/>
+                        <text x="300" y="260" text-anchor="middle" font-size="9" fill="#666">HTTP 请求</text>
+                        
+                        <!-- Apollo -> Server -->
+                        <path d="M 850 140 L 800 140 L 800 200 L 690 200" stroke="#ff6b6b" stroke-width="2" stroke-dasharray="5,5" marker-end="url(#arrowhead)"/>
+                        <text x="750" y="190" text-anchor="middle" font-size="9" fill="#ff6b6b">配置订阅</text>
+                        
+                        <!-- 箭头定义 -->
+                        <defs>
+                            <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+                                <polygon points="0 0, 10 3.5, 0 7" fill="#666"/>
+                            </marker>
+                        </defs>
+                    </svg>
+                </div>
+                
+                <div class="explanation">
+                    <h4>🔍 架构分层说明</h4>
+                    <ul>
+                        <li><strong>MCP Client 层（蓝色区域）：</strong>面向用户的 Host 主机应用，包括 DevOps 助手、IDEA 通义灵码插件、一心助手运营助手</li>
+                        <li><strong>MCP Server 层（绿色区域）：</strong>核心服务层，提供 SSE 连接管理、JSON-RPC 协议处理、统一鉴权、工具处理器等能力</li>
+                        <li><strong>业务服务层（橙色区域）：</strong>微服务集群，包括商品库存、会员营销、销售分析、考勤核查、奖惩单据等业务系统</li>
+                        <li><strong>基础设施（灰色区域）：</strong>Apollo 配置中心、微服务网关、LLM 大模型等支撑组件</li>
+                    </ul>
+                </div>
+            </section>
+            
+            <!-- 第四部分：核心流程 -->
+            <section>
+                <h2>🔄 四、核心交互流程</h2>
+                
+                <h3>4.1 工具调用完整流程</h3>
+                <div class="flow-chart">
+                    <div class="flow-step">
+                        <div class="step-number">1</div>
+                        <strong>建立 SSE 连接</strong>
+                        <p style="font-size: 0.9em; margin-top: 10px;">Client → Server<br/>/sse?appId=&yxt&userId=1162324</p>
+                    </div>
+                    <div class="flow-step">
+                        <div class="step-number">2</div>
+                        <strong>获取工具列表</strong>
+                        <p style="font-size: 0.9em; margin-top: 10px;">tools/list<br/>sessionId=dsf234234...</p>
+                    </div>
+                    <div class="flow-step">
+                        <div class="step-number">3</div>
+                        <strong>权限验证</strong>
+                        <p style="font-size: 0.9em; margin-top: 10px;">基于 appId+userId<br/>过滤可用工具</p>
+                    </div>
+                    <div class="flow-step">
+                        <div class="step-number">4</div>
+                        <strong>调用工具</strong>
+                        <p style="font-size: 0.9em; margin-top: 10px;">tools/call<br/>methodName + params</p>
+                    </div>
+                    <div class="flow-step">
+                        <div class="step-number">5</div>
+                        <strong>HTTP 请求</strong>
+                        <p style="font-size: 0.9em; margin-top: 10px;">Server → 业务微服务<br/>/1.0/product/query</p>
+                    </div>
+                    <div class="flow-step">
+                        <div class="step-number">6</div>
+                        <strong>返回结果</strong>
+                        <p style="font-size: 0.9em; margin-top: 10px;">JSON-RPC 响应<br/>沿原路返回</p>
+                    </div>
+                </div>
+                
+                <h3>4.2 JSON-RPC 协议示例</h3>
+                <div class="code-block">
+// 请求：获取工具列表
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "method": "tools/list",
+  "params": {
+    "sessionId": "dsf234234..."
+  }
+}
+
+// 响应：工具列表
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "result": {
+    "tools": [
+      {
+        "name": "query_product_by_name",
+        "description": "输入商品名字查询商品信息",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "arg0": {
+              "type": "string",
+              "description": "商品名字"
+            }
+          }
+        }
+      },
+      {
+        "name": "getAwardPunishment",
+        "description": "根据奖惩单编号查询奖惩信息",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "awardPunishmentNo": {
+              "type": "string",
+              "description": "奖惩单据编号"
+            }
+          },
+          "required": ["awardPunishmentNo"]
+        }
+      }
+    ]
+  }
+}
+                </div>
+                
+                <div class="code-block">
+// 请求：调用工具
+{
+  "jsonrpc": "2.0",
+  "id": 2,
+  "method": "tools/call",
+  "params": {
+    "name": "query_product_by_name",
+    "arguments": {
+      "arg0": "阿莫西林胶囊"
+    },
+    "sessionId": "dsf234234..."
+  }
+}
+
+// 响应：工具执行结果
+{
+  "jsonrpc": "2.0",
+  "id": 2,
+  "result": {
+    "content": [
+      {
+        "type": "text",
+        "text": "{\"code\":200,\"data\":{\"productName\":\"阿莫西林胶囊\",\"price\":15.80,\"stock\":1000},\"msg\":\"查询成功\"}"
+      }
+    ]
+  }
+}
+                </div>
+            </section>
+            
+            <!-- 第五部分：关键技术特性 -->
+            <section>
+                <h2>⚙️ 五、关键技术特性</h2>
+                
+                <h3>5.1 动态工具发布机制</h3>
+                <p>基于 Apollo 配置中心实现工具的动态发布与下线，无需重新编码和部署。</p>
+                
+                <div class="code-block">
+// Apollo 配置：mcp_resource.json
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "awardPunishmentNo": {
+      "type": "string",
+      "description": "奖惩单据编号，此参数需要要求用户提供"
+    }
+  },
+  "required": ["awardPunishmentNo"],
+  "additionalProperties": false,
+  "yxtToolName": "assist-core-toolkit-local_getAwardPunishment",
+  "yxtToolDescription": "根据奖惩单编号查询奖惩信息",
+  "yxtToolEnable": true,
+  "yxtToolProvider": {
+    "protocol": "server",
+    "protocolMeta": {
+      "serverName": "assist-core-toolkit-local",
+      "serverUrl": "/c/awardPunishment/r/1.0/getAwardPunishment"
+    },
+    "alarmTagIdList": [11]
+  }
+}
+                </div>
+                
+                <div class="explanation">
+                    <h4>🔑 协议字段说明</h4>
+                    <ul>
+                        <li><strong>yxtToolName：</strong>工具唯一标识符</li>
+                        <li><strong>yxtToolDescription：</strong>工具描述，用于 LLM 理解何时调用此工具</li>
+                        <li><strong>yxtToolEnable：</strong>工具开关，false 时自动隐藏</li>
+                        <li><strong>protocol：</strong>协议类型（server/git/confluence/qiyewexin）</li>
+                        <li><strong>protocolMeta：</strong>协议元数据，定义服务地址或文档链接</li>
+                        <li><strong>alarmTagIdList：</strong>工具不可用时的告警标签 ID 列表</li>
+                    </ul>
+                </div>
+                
+                <h3>5.2 权限控制策略</h3>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>授权维度</th>
+                            <th>配置示例</th>
+                            <th>应用场景</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>基于角色</strong></td>
+                            <td>targetType: "ruleId"</td>
+                            <td>不同角色（店员/店长/研发）看到不同工具集</td>
+                        </tr>
+                        <tr>
+                            <td><strong>基于用户</strong></td>
+                            <td>targetType: "userId"</td>
+                            <td>精细化控制特定用户的工具访问权限</td>
+                        </tr>
+                        <tr>
+                            <td><strong>基于 AppId</strong></td>
+                            <td>targetType: "appId"</td>
+                            <td>不同 ChatClient（DevOps/通义灵码/运营助手）差异化授权</td>
+                        </tr>
+                        <tr>
+                            <td><strong>基于场景</strong></td>
+                            <td>targetType: "scene"</td>
+                            <td>不同业务场景（考勤核查/效期核查）使用不同工具组合</td>
+                        </tr>
+                    </tbody>
+                </table>
+                
+                <h3>5.3 会话管理机制</h3>
+                <div class="highlight-box">
+                    <div class="box" style="background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);">
+                        <h4>场景一：内部 ChatClient</h4>
+                        <p><strong>特点：</strong>用户通过我们提供的 Host（如一心助手小程序）通信</p>
+                        <p><strong>实现：</strong></p>
+                        <ul style="font-size: 0.9em;">
+                            <li>用户与 Host 建立连接时维护 sessionId 与用户身份信息映射</li>
+                            <li>MCP Client 与 MCP Server 只建立一个 SSE 链接</li>
+                            <li>MCP Client 调用时传递 sessionId 给 MCP Server 做权限过滤</li>
+                        </ul>
+                    </div>
+                    <div class="box" style="background: linear-gradient(135deg, #a8edea 0%, #fed6e3 100%);">
+                        <h4>场景二：主流客户端</h4>
+                        <p><strong>特点：</strong>IDEA、Cursor 等独立 Host 直接与 MCP Server 通信</p>
+                        <p><strong>实现：</strong></p>
+                        <ul style="font-size: 0.9em;">
+                            <li>每个 HOST 都建立一个 SSE 链接</li>
+                            <li>在/sse 端点扩展传递授权 appId</li>
+                            <li>例：/sse?appId="yxt_idea_plugin"&userId=1162324</li>
+                        </ul>
+                    </div>
+                </div>
+            </section>
+            
+            <!-- 第六部分：模块划分 -->
+            <section>
+                <h2>📦 六、模块详细设计</h2>
+                
+                <h3>6.1 模块划分</h3>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>模块名称</th>
+                            <th>类型</th>
+                            <th>职责</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>assistant-chat</strong></td>
+                            <td>server</td>
+                            <td>chatClient 面向用户，接收用户指令与 LLM 通信</td>
+                        </tr>
+                        <tr>
+                            <td><strong>mcp-server-deploy</strong></td>
+                            <td>server</td>
+                            <td>MCP 服务主体，提供标准化的 MCP 工具集</td>
+                        </tr>
+                        <tr>
+                            <td><strong>yxt-mcp-server-starter</strong></td>
+                            <td>jar</td>
+                            <td>引入此包具有服务动态发布、动态上下线、服务授权、服务监控等通用能力</td>
+                        </tr>
+                        <tr>
+                            <td><strong>yxt-mcp-client-starter</strong></td>
+                            <td>jar</td>
+                            <td>引入此包具有向 mcp-server 传递用户信息的通用能力</td>
+                        </tr>
+                        <tr>
+                            <td><strong>yxt-mcp-tool-auto-deployer-starter</strong></td>
+                            <td>jar</td>
+                            <td>业务服务引用，可以动态发布 MCP 工具</td>
+                        </tr>
+                    </tbody>
+                </table>
+                
+                <h3>6.2 MCPServer 划分方案对比</h3>
+                <div class="highlight-box">
+                    <div class="box" style="background: linear-gradient(135deg, #ffecd2 0%, #fcb69f 100%);">
+                        <h4>方案一：按业务线划分多 MCP Server</h4>
+                        <p><strong>优点：</strong></p>
+                        <ul>
+                            <li>各业务线服务互不干扰</li>
+                            <li>可独立部署、扩容、升级</li>
+                            <li>更容易实现访问控制和数据隔离</li>
+                        </ul>
+                        <p><strong>缺点：</strong></p>
+                        <ul>
+                            <li>多实例导致配置、监控、日志难以统一管理</li>
+                            <li>工具组合、策略变更需逐个下发</li>
+                            <li>小业务线可能造成资源浪费</li>
+                        </ul>
+                    </div>
+                    <div class="box" style="background: linear-gradient(135deg, #a1c4fd 0%, #c2e9fb 100%);">
+                        <h4>方案二：一个 MCP Server 统一管理 ✅推荐</h4>
+                        <p><strong>优点：</strong></p>
+                        <ul>
+                            <li>所有业务线可在同一平台进行工具下发、配置管理</li>
+                            <li>日志、监控、告警、发布等可集中处理</li>
+                            <li>支持跨业务线的工具组合与流程调用</li>
+                        </ul>
+                        <p><strong>缺点：</strong></p>
+                        <ul>
+                            <li>单一故障点风险（可通过集群解决）</li>
+                        </ul>
+                    </div>
+                </div>
+            </section>
+            
+            <!-- 第七部分：集群部署方案 -->
+            <section>
+                <h2>🌐 七、集群部署扩展方案</h2>
+                
+                <h3>7.1 集群模式挑战</h3>
+                <p>在单机模式下，MCP Client 与 MCP Server 建立 SSE 长连接后，会话信息存储在内存中。但在集群模式下，当请求被负载均衡到不同的 Server 实例时，会出现"找不到物理连接"的 404 错误。</p>
+                
+                <div class="diagram-container">
+                    <svg viewBox="0 0 900 400" xmlns="http://www.w3.org/2000/svg" style="width: 100%; height: auto;">
+                        <!-- 标题 -->
+                        <text x="450" y="30" text-anchor="middle" font-size="16" font-weight="bold" fill="#333">集群模式会话管理方案</text>
+                        
+                        <!-- MCP Client -->
+                        <rect x="50" y="60" width="150" height="60" rx="10" fill="#667eea"/>
+                        <text x="125" y="85" text-anchor="middle" font-size="12" fill="white" font-weight="bold">MCP Client</text>
+                        <text x="125" y="105" text-anchor="middle" font-size="10" fill="white">逻辑连接 id=1</text>
+                        
+                        <!-- Nacos -->
+                        <rect x="350" y="20" width="120" height="50" rx="8" fill="#f59e0b"/>
+                        <text x="410" y="45" text-anchor="middle" font-size="11" fill="white" font-weight="bold">Nacos</text>
+                        <text x="410" y="60" text-anchor="middle" font-size="9" fill="white">服务注册与发现</text>
+                        
+                        <!-- Server 1 -->
+                        <rect x="600" y="60" width="200" height="120" rx="10" fill="#d5e8d4" stroke="#82b366" stroke-width="2"/>
+                        <text x="700" y="85" text-anchor="middle" font-size="12" fill="#82b366" font-weight="bold">SERVER 1</text>
+                        
+                        <rect x="620" y="100" width="160" height="60" rx="8" fill="#10b981"/>
+                        <text x="700" y="120" text-anchor="middle" font-size="10" fill="white" font-weight="bold">会话池</text>
+                        <text x="700" y="140" text-anchor="middle" font-size="9" fill="white">逻辑 id=1 → Session</text>
+                        
+                        <!-- Server 2 -->
+                        <rect x="600" y="220" width="200" height="120" rx="10" fill="#ffe6cc" stroke="#d79b00" stroke-width="2"/>
+                        <text x="700" y="245" text-anchor="middle" font-size="12" fill="#d79b00" font-weight="bold">SERVER 2</text>
+                        
+                        <rect x="620" y="260" width="160" height="60" rx="8" fill="#fbbf24"/>
+                        <text x="700" y="280" text-anchor="middle" font-size="10" fill="white" font-weight="bold">会话池</text>
+                        <text x="700" y="300" text-anchor="middle" font-size="9" fill="white">逻辑 id=2 → Session</text>
+                        
+                        <!-- 连接线 -->
+                        <!-- Client -> Nacos -->
+                        <path d="M 200 90 L 340 90 L 340 45" stroke="#666" stroke-width="2" stroke-dasharray="5,5"/>
+                        <text x="270" y="80" text-anchor="middle" font-size="9" fill="#666">订阅服务列表</text>
+                        
+                        <!-- Client -> Server1 -->
+                        <path d="M 200 90 L 590 90" stroke="#666" stroke-width="2" marker-end="url(#arrowhead2)"/>
+                        <text x="395" y="80" text-anchor="middle" font-size="9" fill="#666">SSE 连接</text>
+                        
+                        <!-- Server1 <-> Server2 -->
+                        <path d="M 700 180 L 700 210" stroke="#ff6b6b" stroke-width="2" stroke-dasharray="5,5" marker-end="url(#arrowhead2)" marker-start="url(#arrowhead2)"/>
+                        <text x="750" y="200" font-size="9" fill="#ff6b6b">JSON RPC</text>
+                        <text x="750" y="215" font-size="9" fill="#ff6b6b">广播推送</text>
+                        
+                        <!-- Nacos -> Server -->
+                        <path d="M 410 70 L 410 100 L 590 100" stroke="#666" stroke-width="2" stroke-dasharray="5,5"/>
+                        <path d="M 410 70 L 410 100 L 590 250" stroke="#666" stroke-width="2" stroke-dasharray="5,5"/>
+                        
+                        <!-- 箭头定义 -->
+                        <defs>
+                            <marker id="arrowhead2" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+                                <polygon points="0 0, 10 3.5, 0 7" fill="#666"/>
+                            </marker>
+                        </defs>
+                    </svg>
+                </div>
+                
+                <h3>7.2 解决方案</h3>
+                <div class="explanation">
+                    <h4>✅ 原生协议广播转发方案</h4>
+                    <ul>
+                        <li><strong>核心思路：</strong>无需新增中间件，利用 JSON-RPC 协议进行广播转发</li>
+                        <li><strong>实现步骤：</strong>
+                            <ol>
+                                <li>MCP Client 请求到达任意 Server 实例</li>
+                                <li>Server 检查本地会话池是否存在对应逻辑连接的物理 Session</li>
+                                <li>若存在，直接处理并返回结果</li>
+                                <li>若不存在，通过 Nacos 获取所有 Server 服务列表</li>
+                                <li>使用 JSON-RPC 协议广播推送到所有 Server 实例</li>
+                                <li>持有该 Session 的 Server 响应请求并返回结果</li>
+                            </ol>
+                        </li>
+                        <li><strong>优势：</strong>无需引入 Redis 等中间件，降低系统复杂度，利用原生协议实现轻量级会话共享</li>
+                    </ul>
+                </div>
+            </section>
+            
+            <!-- 第八部分：总结与展望 -->
+            <section>
+                <h2>🎯 八、总结与展望</h2>
+                
+                <h3>8.1 核心价值</h3>
+                <div class="highlight-box">
+                    <div class="box" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
+                        <h4>🚀 对研发团队</h4>
+                        <ul>
+                            <li>屏蔽 MCP 协议细节，零门槛接入</li>
+                            <li>工具动态发布，无需反复编码部署</li>
+                            <li>统一鉴权和流控，保障系统安全</li>
+                            <li>完善的监控和告警，快速定位问题</li>
+                        </ul>
+                    </div>
+                    <div class="box" style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);">
+                        <h4>💼 对业务团队</h4>
+                        <ul>
+                            <li>快速构建 AI 智能体应用</li>
+                            <li>灵活调用业务系统功能</li>
+                            <li>基于业务数据个性化输出</li>
+                            <li>提升运营效率和用户体验</li>
+                        </ul>
+                    </div>
+                    <div class="box" style="background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);">
+                        <h4>🏢 对公司</h4>
+                        <ul>
+                            <li>沉淀 AI 能力复用底座</li>
+                            <li>构建标准化技术解决方案</li>
+                            <li>支撑多场景多角色协同发展</li>
+                            <li>提升企业智能化水平</li>
+                        </ul>
+                    </div>
+                </div>
+                
+                <h3>8.2 未来规划</h3>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>阶段</th>
+                            <th>时间</th>
+                            <th>目标</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>短期（本期）</strong></td>
+                            <td>2024 Q1-Q2</td>
+                            <td>完成 MCP Server 底座建设，落地 DevOps 助手、通义灵码插件、运营助手三大场景</td>
+                        </tr>
+                        <tr>
+                            <td><strong>中期</strong></td>
+                            <td>2024 Q3-Q4</td>
+                            <td>构建可视化 MCP Server 管理看板，提升工具治理、权限控制与版本发布运营能力</td>
+                        </tr>
+                        <tr>
+                            <td><strong>长期</strong></td>
+                            <td>2025+</td>
+                            <td>支持集群部署，引入 A2A 协议实现 Agent 间协作，构建企业级 AI 生态平台</td>
+                        </tr>
+                    </tbody>
+                </table>
+                
+                <div class="note" style="background: #d4edda; border-left-color: #28a745;">
+                    <strong>🌟 愿景：</strong>通过 MCP 协议标准化建设，让 AI 大模型真正融入企业业务系统，成为提升生产力的得力助手，而非空中楼阁式的玩具。
+                </div>
+            </section>
+        </div>
+        
+        <footer>
+            <p>© 2024 一心数科技术团队 | MCP Server 架构设计分享</p>
+            <p>如有疑问或建议，欢迎联系技术团队</p>
+        </footer>
+    </div>
+</body>
+</html>
