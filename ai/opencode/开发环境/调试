@@ -1,0 +1,187 @@
+现有访问量：
+
+
+接入场景
+
+
+dev
+/data/opencode/server/project_dev/AT1859193049074150211/S1865130626346377736
+/data/opencode/server/project_test/AT1855360060115667977/S1864977918267160327
+/data/opencode/server/project_test/S1865066130703876359/S1865066130703876359
+
+
+curl -X POST http://127.0.0.1:8080/actuator/loggers/com.yxt.agentic.bus.server.agent.entrance.listener.OpenCodeSSEEventListener \
+-H "Content-Type: application/vnd.spring-boot.actuator.v2+json;charset=UTF-8" \
+--data '{"configuredLevel":"debug"}'
+
+
+curl -X POST http://127.0.0.1:8080/actuator/loggers/com.yxt.agentic.bus.anticorruption.opencode.adapter.impl.OpenCodeAdapterImpl \
+-H "Content-Type: application/vnd.spring-boot.actuator.v2+json;charset=UTF-8" \
+--data '{"configuredLevel":"debug"}'
+
+
+
+
+{
+    "directory": "/data/opencode/server/project_test/AT1864675005409323271/S1864951819633068295",
+    "payload": {
+        "type": "message.part.updated",
+        "properties": {
+            "part": {
+                "id": "prt_e1a3d81c7001KgJJvQkyeQ5Q4t",
+                "sessionID": "ses_1e5c290d9ffeVB6b9VM3dF1dIZ",
+                "messageID": "msg_e1a3d6f2e001UDxpelMBQnhr1s",
+                "type": "tool",
+                "callID": "call_f66ca94d52e1451fb87f9347",
+                "tool": "question",
+                "state": {
+                    "status": "error",
+                    "input": {
+                        "questions": [
+                            {
+                                "question": "您的头痛有多严重？请用0-10分评分，0为不痛，10为最痛",
+                                "header": "严重程度",
+                                "options": [
+                                    {
+                                        "label": "轻度 (1-3分)",
+                                        "description": "轻微疼痛，不影响日常活动"
+                                    },
+                                    {
+                                        "label": "中度 (4-6分)",
+                                        "description": "明显疼痛，影响部分活动"
+                                    },
+                                    {
+                                        "label": "重度 (7-8分)",
+                                        "description": "剧烈疼痛，严重影响活动"
+                                    },
+                                    {
+                                        "label": "极重度 (9-10分)",
+                                        "description": "无法忍受的疼痛"
+                                    }
+                                ],
+                                "multiple": false
+                            },
+                            {
+                                "question": "头痛持续了多长时间？",
+                                "header": "持续时间",
+                                "options": [
+                                    {
+                                        "label": "小于1小时",
+                                        "description": "短暂头痛"
+                                    },
+                                    {
+                                        "label": "1-24小时",
+                                        "description": "持续一天以内"
+                                    },
+                                    {
+                                        "label": "1-3天",
+                                        "description": "持续几天"
+                                    },
+                                    {
+                                        "label": "超过3天",
+                                        "description": "持续多日"
+                                    },
+                                    {
+                                        "label": "反复发作",
+                                        "description": "时好时坏"
+                                    }
+                                ],
+                                "multiple": false
+                            },
+                            {
+                                "question": "头痛是如何开始的？",
+                                "header": "发作特点",
+                                "options": [
+                                    {
+                                        "label": "突然发作",
+                                        "description": "几秒或几分钟内突然出现"
+                                    },
+                                    {
+                                        "label": "逐渐加重",
+                                        "description": "缓慢出现并逐渐加重"
+                                    },
+                                    {
+                                        "label": "反复发作",
+                                        "description": "以前也有类似头痛"
+                                    },
+                                    {
+                                        "label": "持续存在",
+                                        "description": "一直存在没有明显变化"
+                                    }
+                                ],
+                                "multiple": false
+                            },
+                            {
+                                "question": "头痛是什么性质的？",
+                                "header": "症状性质",
+                                "options": [
+                                    {
+                                        "label": "搏动性疼痛",
+                                        "description": "一跳一跳的疼痛"
+                                    },
+                                    {
+                                        "label": "持续性钝痛",
+                                        "description": "持续不断的闷痛"
+                                    },
+                                    {
+                                        "label": "刺痛",
+                                        "description": "针扎样的疼痛"
+                                    },
+                                    {
+                                        "label": "压迫感",
+                                        "description": "像被重物压着"
+                                    },
+                                    {
+                                        "label": "灼痛",
+                                        "description": "烧灼样的疼痛"
+                                    }
+                                ],
+                                "multiple": false
+                            },
+                            {
+                                "question": "是否有以下伴随症状？",
+                                "header": "伴随症状",
+                                "options": [
+                                    {
+                                        "label": "恶心呕吐",
+                                        "description": "感觉想吐或已经呕吐"
+                                    },
+                                    {
+                                        "label": "畏光畏声",
+                                        "description": "对光和声音敏感"
+                                    },
+                                    {
+                                        "label": "视力模糊",
+                                        "description": "看东西不清楚"
+                                    },
+                                    {
+                                        "label": "头晕",
+                                        "description": "感觉头晕或眩晕"
+                                    },
+                                    {
+                                        "label": "发热",
+                                        "description": "体温升高"
+                                    },
+                                    {
+                                        "label": "颈部僵硬",
+                                        "description": "脖子僵硬活动困难"
+                                    },
+                                    {
+                                        "label": "无伴随症状",
+                                        "description": "只有头痛，没有其他症状"
+                                    }
+                                ],
+                                "multiple": true
+                            }
+                        ]
+                    },
+                    "error": "Error: The question tool was called with invalid arguments: RangeError: Maximum call stack size exceeded..\nPlease rewrite the input so it satisfies the expected schema.",
+                    "time": {
+                        "start": 1778556718671,
+                        "end": 1778556718680
+                    }
+                }
+            }
+        }
+    }
+}
