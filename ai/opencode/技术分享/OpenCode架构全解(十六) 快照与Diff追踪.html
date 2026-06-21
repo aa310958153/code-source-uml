@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OpenCode 快照与Diff追踪 - 深度技术分享</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}html{scroll-behavior:smooth}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#f8fafc;color:#1e293b;line-height:1.7}
+.hero{background:linear-gradient(135deg,#1e3a5f 0%,#1d4ed8 50%,#3b82f6 100%);color:white;padding:80px 0 60px;text-align:center}
+.hero h1{font-size:2.4em;margin-bottom:12px;font-weight:800}.hero p{font-size:1.15em;opacity:.85;max-width:700px;margin:0 auto}
+.hero .tag{display:inline-block;background:rgba(255,255,255,.15);padding:4px 14px;border-radius:20px;font-size:.85em;margin-top:16px}
+.container{max-width:960px;margin:0 auto;padding:0 24px}
+.toc{background:white;border-radius:12px;padding:28px 32px;margin:32px auto;box-shadow:0 1px 3px rgba(0,0,0,.08)}
+.toc h2{font-size:1.2em;margin-bottom:14px;color:#1d4ed8}.toc ol{padding-left:22px}.toc li{margin:6px 0}.toc a{color:#1d4ed8;text-decoration:none;font-size:.95em}.toc a:hover{text-decoration:underline}
+.section{margin:36px 0}.section h2{font-size:1.5em;font-weight:700;margin-bottom:16px;padding-bottom:8px;border-bottom:2px solid #e2e8f0}
+.section h3{font-size:1.15em;font-weight:600;margin:18px 0 10px;color:#334155}
+.card{background:white;border-radius:10px;padding:24px;margin:16px 0;box-shadow:0 1px 3px rgba(0,0,0,.06)}
+pre{background:#0f172a;color:#e2e8f0;border-radius:8px;padding:18px;overflow-x:auto;font-size:.88em;line-height:1.6;margin:12px 0}
+code{font-family:'JetBrains Mono','Fira Code',monospace}.inline-code{background:#e2e8f0;color:#1e293b;padding:2px 6px;border-radius:4px;font-size:.9em}
+table{width:100%;border-collapse:collapse;margin:14px 0;font-size:.92em}
+th{background:#1d4ed8;color:white;padding:10px 14px;text-align:left}td{padding:10px 14px;border-bottom:1px solid #e2e8f0}tr:nth-child(even){background:#f1f5f9}
+.tip{background:linear-gradient(135deg,#eff6ff,#dbeafe);border-left:4px solid #3b82f6;padding:16px 20px;border-radius:0 8px 8px 0;margin:14px 0}
+.warn{background:linear-gradient(135deg,#fefce8,#fef9c3);border-left:4px solid #eab308;padding:16px 20px;border-radius:0 8px 8px 0;margin:14px 0}
+.flow{display:flex;align-items:center;justify-content:center;gap:8px;flex-wrap:wrap;margin:20px 0;font-size:.92em}
+.flow .node{background:white;border:2px solid #1d4ed8;border-radius:8px;padding:8px 16px;font-weight:600}.flow .arrow{color:#1d4ed8;font-size:1.3em;font-weight:bold}
+.step{display:flex;gap:14px;align-items:flex-start;margin:12px 0}
+.step .num{background:#1d4ed8;color:white;min-width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:.9em;flex-shrink:0}
+.step .content{flex:1}
+</style>
+</head>
+<body>
+<div class="hero"><div class="container"><h1>OpenCode 快照与 Diff 追踪</h1><p>私有 Git 仓库实现每步代码变更追踪、回退与 Diff 可视化</p><div class="tag">Harness 深度技术分享 · 第 16 篇</div></div></div>
+
+<div class="container">
+<div class="toc"><h2>目录</h2><ol>
+<li><a href="#ch1">为什么需要快照系统？</a></li>
+<li><a href="#ch2">私有 Git 仓库架构</a></li>
+<li><a href="#ch3">track() — 每步快照记录</a></li>
+<li><a href="#ch4">patch() — 变更文件检测</a></li>
+<li><a href="#ch5">diff() 与 diffFull() — 详细差异计算</a></li>
+<li><a href="#ch6">restore() 与 revert() — 快照回退</a></li>
+<li><a href="#ch7">Patch 模块 — apply-patch 格式解析</a></li>
+<li><a href="#ch8">与 Processor 的集成</a></li>
+<li><a href="#ch9">自动清理与 GC</a></li>
+<li><a href="#ch10">完整生命周期总结</a></li>
+</ol></div>
+
+<div class="section" id="ch1"><h2>一、为什么需要快照系统？</h2>
+<p>AI 在 ReAct 循环中每一步都可能修改代码文件。如果没有快照机制，用户面临三个问题：</p>
+<div class="card">
+<table>
+<tr><th>问题</th><th>快照的解决方案</th></tr>
+<tr><td>AI 改错了代码，如何回退？</td><td>restore() 恢复到任意步骤的 git tree hash</td></tr>
+<tr><td>这一步改了什么文件？</td><td>patch() 对比两个 hash 之间的变更文件列表</td></tr>
+<tr><td>具体改了什么内容？</td><td>diffFull() 获取每个文件的 additions/deletions/before/after</td></tr>
+</table>
+</div>
+</div>
+
+<div class="section" id="ch2"><h2>二、私有 Git 仓库架构</h2>
+<p>OpenCode 的快照系统使用一个<strong>独立的私有 Git 仓库</strong>（不影响项目的 .git），存储在全局数据目录中：</p>
+<pre><code>// snapshot/index.ts
+function gitdir() {
+    const project = Instance.project
+    return path.join(Global.Path.data, "snapshot", project.id)
+    // 例如: ~/.local/share/opencode/snapshot/abc123/
+}
+
+// 初始化私有 Git 仓库
+export async function track() {
+    const git = gitdir()
+    if (await fs.mkdir(git, { recursive: true })) {
+        // 首次使用：初始化 Git 仓库
+        await $`git init`.env({ GIT_DIR: git, GIT_WORK_TREE: Instance.worktree })
+        // Windows 兼容配置
+        await $`git --git-dir ${git} config core.autocrlf false`
+        await $`git --git-dir ${git} config core.longpaths true`
+        await $`git --git-dir ${git} config core.symlinks true`
+        await $`git --git-dir ${git} config core.fsmonitor false`
+    }
+    await add(git)  // git add .
+    const hash = await $`git --git-dir ${git} --work-tree ${Instance.worktree} write-tree`.text()
+    return hash.trim()  // 返回 tree hash（不是 commit hash）
+}</code></pre>
+
+<div class="tip">
+<strong>为什么用 tree hash 而非 commit hash？</strong><span class="inline-code">git write-tree</span> 返回 tree hash，它只记录文件树状态，不需要 commit message。这比 commit 更轻量，速度更快，且足够用于 diff 和 restore。
+</div>
+
+<div class="warn">
+<strong>与项目 Git 完全隔离：</strong>快照 Git 使用 <span class="inline-code">GIT_DIR</span> 环境变量指定独立的 git 目录，work-tree 指向项目目录。这意味着快照操作不会出现在项目的 <span class="inline-code">git log</span> 中。
+</div>
+</div>
+
+<div class="section" id="ch3"><h2>三、track() — 每步快照记录</h2>
+<pre><code>// processor.ts 中每个 step 的开始和结束
+case "start-step":
+    snapshot = await Snapshot.track()     // 记录当前文件状态
+    await Session.updatePart({ type: "step-start", snapshot })
+    break
+
+case "finish-step":
+    // ... 其他逻辑 ...
+    await Session.updatePart({
+        type: "step-finish",
+        snapshot: await Snapshot.track(),  // 记录修改后的状态
+    })
+    break</code></pre>
+<p>每步记录两个 hash：<span class="inline-code">step-start</span>（修改前）和 <span class="inline-code">step-finish</span>（修改后）。两者的 diff 就是这一步的文件变更。</p>
+</div>
+
+<div class="section" id="ch4"><h2>四、patch() — 变更文件检测</h2>
+<pre><code>export async function patch(hash: string): Promise&lt;Patch> {
+    const git = gitdir()
+    await add(git)
+    const result = await $`git --git-dir ${git} --work-tree ${Instance.worktree}
+        diff --no-ext-diff --name-only ${hash} -- .`
+        .text()
+
+    return {
+        hash,
+        files: result.trim().split("\n")
+            .map(x => path.join(Instance.worktree, x).replaceAll("\\", "/"))
+    }
+}</code></pre>
+<p><span class="inline-code">patch()</span> 返回从指定 hash 到当前工作区之间所有变更的文件路径列表。这些文件路径被存储为 <span class="inline-code">patch</span> Part，前端据此展示"本步骤修改了 N 个文件"。</p>
+</div>
+
+<div class="section" id="ch5"><h2>五、diff() 与 diffFull() — 详细差异计算</h2>
+<pre><code>// diff() — 返回 unified diff 文本
+export async function diff(hash: string) {
+    return await $`git --git-dir ${git} --work-tree ${Instance.worktree}
+        diff --no-ext-diff ${hash} -- .`.text()
+}
+
+// diffFull() — 返回结构化的文件级差异
+export async function diffFull(from: string, to: string): Promise&lt;FileDiff[]> {
+    // 1. 获取文件状态（added/deleted/modified）
+    const statuses = await $`git diff --name-status --no-renames ${from} ${to}`.text()
+
+    // 2. 获取行数统计（additions/deletions）
+    for await (const line of $`git diff --numstat ${from} ${to}`.lines()) {
+        const [additions, deletions, file] = line.split("\t")
+
+        // 3. 获取 before/after 文件内容
+        const before = await $`git show ${from}:${file}`.text()
+        const after = await $`git show ${to}:${file}`.text()
+
+        result.push({ file, before, after, additions, deletions, status })
+    }
+}</code></pre>
+
+<div class="card">
+<h3>FileDiff 数据结构</h3>
+<pre><code>export const FileDiff = z.object({
+    file: z.string(),          // 文件路径
+    before: z.string(),        // 修改前内容
+    after: z.string(),         // 修改后内容
+    additions: z.number(),     // 新增行数
+    deletions: z.number(),     // 删除行数
+    status: z.enum(["added", "deleted", "modified"]).optional(),
+})</code></pre>
+</div>
+</div>
+
+<div class="section" id="ch6"><h2>六、restore() 与 revert() — 快照回退</h2>
+<pre><code>// restore() — 恢复到指定 tree hash 的完整状态
+export async function restore(snapshot: string) {
+    await $`git --git-dir ${git} --work-tree ${Instance.worktree}
+        read-tree ${snapshot} &&
+        git --git-dir ${git} --work-tree ${Instance.worktree}
+        checkout-index -a -f`
+}
+
+// revert() — 精细回退：按文件恢复到各自的历史 hash
+export async function revert(patches: Patch[]) {
+    const files = new Set&lt;string>()
+    for (const item of patches) {
+        for (const file of item.files) {
+            if (files.has(file)) continue
+            const result = await $`git checkout ${item.hash} -- ${file}`
+            if (result.exitCode !== 0) {
+                // 文件在快照中不存在 → 删除
+                const checkTree = await $`git ls-tree ${item.hash} -- ${file}`
+                if (!checkTree.text().trim())
+                    await fs.unlink(file)
+            }
+            files.add(file)
+        }
+    }
+}</code></pre>
+
+<div class="warn">
+<strong>restore vs revert：</strong>restore 是将整个工作区恢复到一个快照点；revert 是精细操作 — 对每个文件分别恢复到其最后一次被修改前的快照版本。revert 更常用，因为它允许用户选择性回退。
+</div>
+</div>
+
+<div class="section" id="ch7"><h2>七、Patch 模块 — apply-patch 格式解析</h2>
+<p>除了 Git 快照，OpenCode 还实现了一个 <span class="inline-code">apply-patch</span> 格式解析器（patch/index.ts），用于处理 AI 生成的结构化代码修改：</p>
+<pre><code>// 支持的 patch 操作
+export type Hunk =
+    | { type: "add"; path: string; contents: string }
+    | { type: "delete"; path: string }
+    | { type: "update"; path: string; move_path?: string; chunks: UpdateFileChunk[] }
+
+// Patch 格式示例
+*** Begin Patch
+*** Add File: src/new-feature.ts
++export function newFeature() {
++    return "hello"
++}
+*** Update File: src/index.ts
+@@ main function
+ export function main() {
+-    console.log("old")
++    console.log("new")
+ }
+*** Delete File: src/deprecated.ts
+*** End Patch</code></pre>
+
+<div class="card">
+<h3>apply-patch 的安全验证</h3>
+<p>Patch 模块实现了两级验证：先验证 patch 语法是否正确（<span class="inline-code">Body</span>），再验证应用 patch 后的结果是否符合预期（<span class="inline-code">CorrectnessError</span>）。这确保了 AI 生成的代码修改不会破坏文件。</p>
+</div>
+</div>
+
+<div class="section" id="ch8"><h2>八、与 Processor 的集成</h2>
+<p>快照系统与 SessionProcessor 紧密集成，每步 ReAct 循环自动记录变更：</p>
+<div class="step"><div class="num">1</div><div class="content"><strong>step-start</strong>：调用 track() 记录开始时的 tree hash</div></div>
+<div class="step"><div class="num">2</div><div class="content"><strong>AI 执行工具</strong>：EditTool、BashTool 等修改文件</div></div>
+<div class="step"><div class="num">3</div><div class="content"><strong>step-finish</strong>：调用 track() 记录结束时的 tree hash</div></div>
+<div class="step"><div class="num">4</div><div class="content"><strong>patch</strong>：对比两个 hash，生成变更文件列表</div></div>
+<div class="step"><div class="num">5</div><div class="content"><strong>前端展示</strong>：SSE 推送 patch Part → 前端显示 diff 视图</div></div>
+</div>
+
+<div class="section" id="ch9"><h2>九、自动清理与 GC</h2>
+<pre><code>// 每小时自动清理 7 天前的快照
+export function init() {
+    Scheduler.register({
+        id: "snapshot.cleanup",
+        interval: hour,
+        run: cleanup,
+        scope: "instance",
+    })
+}
+
+export async function cleanup() {
+    await $`git --git-dir ${git} --work-tree ${Instance.worktree} gc --prune=7.days`
+}</code></pre>
+<p>Git GC 会压缩和清理不可达的对象，防止快照仓库无限增长。</p>
+</div>
+
+<div class="section" id="ch10"><h2>十、完整生命周期总结</h2>
+<div class="card">
+<table>
+<tr><th>规律</th><th>体现</th></tr>
+<tr><td><strong>私有 Git</strong></td><td>独立 GIT_DIR，不污染项目 Git 历史</td></tr>
+<tr><td><strong>Tree Hash</strong></td><td>使用 write-tree 而非 commit，轻量高效</td></tr>
+<tr><td><strong>每步双记</strong></td><td>start-step 和 finish-step 各记一次 hash，精确计算步骤变更</td></tr>
+<tr><td><strong>精细回退</strong></td><td>revert 按文件级别回退，restore 按整体回退</td></tr>
+<tr><td><strong>结构化 Diff</strong></td><td>diffFull 返回 before/after 内容 + additions/deletions 统计</td></tr>
+<tr><td><strong>apply-patch</strong></td><td>独立于 Git 的结构化代码修改格式，带安全验证</td></tr>
+<tr><td><strong>自动 GC</strong></td><td>每小时清理 7 天前的不可达对象，防止仓库膨胀</td></tr>
+</table>
+</div>
+
+<div class="tip"><strong>下一篇预告：</strong>Plugin 插件架构 — 内置插件、外部插件、Hooks 机制与扩展点设计。</div>
+</div>
+</div>
+</body>
+</html>

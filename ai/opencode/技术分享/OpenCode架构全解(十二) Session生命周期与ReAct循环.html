@@ -1,0 +1,643 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OpenCode Session生命周期与ReAct循环 - 深度技术分享</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#f8fafc;color:#1e293b;line-height:1.7}
+.hero{background:linear-gradient(135deg,#0c4a6e 0%,#0369a1 50%,#0ea5e9 100%);color:white;padding:80px 0 60px;text-align:center}
+.hero h1{font-size:2.4em;margin-bottom:12px;font-weight:800}
+.hero p{font-size:1.15em;opacity:.85;max-width:700px;margin:0 auto}
+.hero .tag{display:inline-block;background:rgba(255,255,255,.15);padding:4px 14px;border-radius:20px;font-size:.85em;margin-top:16px}
+.container{max-width:960px;margin:0 auto;padding:0 24px}
+.toc{background:white;border-radius:12px;padding:28px 32px;margin:32px auto;box-shadow:0 1px 3px rgba(0,0,0,.08)}
+.toc h2{font-size:1.2em;margin-bottom:14px;color:#0369a1}
+.toc ol{padding-left:22px}
+.toc li{margin:6px 0}
+.toc a{color:#0369a1;text-decoration:none;font-size:.95em}
+.toc a:hover{text-decoration:underline}
+.section{margin:36px 0}
+.section h2{font-size:1.5em;font-weight:700;color:#1e293b;margin-bottom:16px;padding-bottom:8px;border-bottom:2px solid #e2e8f0}
+.section h3{font-size:1.15em;font-weight:600;margin:18px 0 10px;color:#334155}
+.card{background:white;border-radius:10px;padding:24px;margin:16px 0;box-shadow:0 1px 3px rgba(0,0,0,.06)}
+pre{background:#0f172a;color:#e2e8f0;border-radius:8px;padding:18px;overflow-x:auto;font-size:.88em;line-height:1.6;margin:12px 0}
+code{font-family:'JetBrains Mono','Fira Code',monospace}
+.inline-code{background:#e2e8f0;color:#1e293b;padding:2px 6px;border-radius:4px;font-size:.9em}
+table{width:100%;border-collapse:collapse;margin:14px 0;font-size:.92em}
+th{background:#0369a1;color:white;padding:10px 14px;text-align:left}
+td{padding:10px 14px;border-bottom:1px solid #e2e8f0}
+tr:nth-child(even){background:#f1f5f9}
+.tip{background:linear-gradient(135deg,#eff6ff,#dbeafe);border-left:4px solid #3b82f6;padding:16px 20px;border-radius:0 8px 8px 0;margin:14px 0}
+.warn{background:linear-gradient(135deg,#fefce8,#fef9c3);border-left:4px solid #eab308;padding:16px 20px;border-radius:0 8px 8px 0;margin:14px 0}
+.danger{background:linear-gradient(135deg,#fef2f2,#fee2e2);border-left:4px solid #ef4444;padding:16px 20px;border-radius:0 8px 8px 0;margin:14px 0}
+.adv-card{background:white;border:1px solid #e2e8f0;border-radius:10px;padding:20px;margin:14px 0}
+.adv-card h4{color:#0369a1;margin-bottom:8px}
+.step{display:flex;gap:14px;align-items:flex-start;margin:12px 0}
+.step .num{background:#0369a1;color:white;min-width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:.9em;flex-shrink:0}
+.step .content{flex:1}
+.box{background:#f1f5f9;border-radius:8px;padding:14px 18px;margin:10px 0;border:1px solid #e2e8f0}
+.flow{display:flex;align-items:center;justify-content:center;gap:8px;flex-wrap:wrap;margin:20px 0;font-size:.92em}
+.flow .node{background:white;border:2px solid #0369a1;border-radius:8px;padding:8px 16px;font-weight:600}
+.flow .arrow{color:#0369a1;font-size:1.3em;font-weight:bold}
+svg{max-width:100%;margin:16px auto;display:block}
+</style>
+</head>
+<body>
+
+<div class="hero">
+<div class="container">
+<h1>OpenCode Session生命周期与ReAct循环</h1>
+<p>深入解析 loop() 核心引擎 — 消息构建、step 计数、Processor 流处理、Compaction 触发与 insertReminders 机制</p>
+<div class="tag">Harness 深度技术分享 · 第 12 篇</div>
+</div>
+</div>
+
+<div class="container">
+
+<div class="toc">
+<h2>目录</h2>
+<ol>
+<li><a href="#ch1">Session — 一切的容器</a></li>
+<li><a href="#ch2">Session 数据模型与事件</a></li>
+<li><a href="#ch3">Session CRUD 操作</a></li>
+<li><a href="#ch4">ReAct 循环 — loop() 全景</a></li>
+<li><a href="#ch5">循环入口：prompt() → loop()</a></li>
+<li><a href="#ch6">消息流重建与 filterCompacted</a></li>
+<li><a href="#ch7">step 计数与 maxSteps 保护</a></li>
+<li><a href="#ch8">insertReminders — Plan/Build 上下文注入</a></li>
+<li><a href="#ch9">resolveTools — 工具解析全流程</a></li>
+<li><a href="#ch10">SessionProcessor — 流式处理核心</a></li>
+<li><a href="#ch11">Snapshot 追踪 — 每步 Diff 记录</a></li>
+<li><a href="#ch12">Compaction 触发与上下文溢出处理</a></li>
+<li><a href="#ch13">BusyError 与并发控制</a></li>
+<li><a href="#ch14">标题生成 — ensureTitle 机制</a></li>
+<li><a href="#ch15">完整生命周期总结</a></li>
+</ol>
+</div>
+
+<!-- 第1章 -->
+<div class="section" id="ch1">
+<h2>一、Session — 一切的容器</h2>
+
+<p>Session 是 OpenCode 中最核心的抽象。每一次用户与 AI 的对话，都发生在一个 Session 中。Session 承载了：</p>
+
+<div class="card">
+<table>
+<tr><th>维度</th><th>内容</th></tr>
+<tr><td><strong>消息历史</strong></td><td>所有 user/assistant 消息及其 parts（text、tool、file、reasoning...）</td></tr>
+<tr><td><strong>Agent 标识</strong></td><td>当前使用的 Agent（build/plan/...），每条消息可独立指定</td></tr>
+<tr><td><strong>模型信息</strong></td><td>使用的 provider 和 model ID</td></tr>
+<tr><td><strong>权限规则</strong></td><td>session.permission — 覆盖 Agent 默认权限</td></tr>
+<tr><td><strong>统计信息</strong></td><td>cost、tokens（input/output/reasoning/cache）、diff summary</td></tr>
+<tr><td><strong>快照追踪</strong></td><td>每步开始/结束时的 git tree hash，用于计算文件变更</td></tr>
+<tr><td><strong>父子关系</strong></td><td>parentID 关联，子 Agent Session 指向父 Session</td></tr>
+</table>
+</div>
+</div>
+
+<!-- 第2章 -->
+<div class="section" id="ch2">
+<h2>二、Session 数据模型与事件</h2>
+
+<h3>2.1 Info Schema</h3>
+<pre><code>// packages/opencode/src/session/index.ts
+export const Info = z.object({
+    id: Identifier.schema("session"),
+    slug: z.string(),                    // 人类可读短标识
+    projectID: z.string(),
+    workspaceID: z.string().optional(),
+    directory: z.string(),
+    parentID: Identifier.schema("session").optional(),
+    title: z.string(),
+    version: z.string(),                 // OpenCode 版本号
+    summary: z.object({                  // diff 统计
+        additions: z.number(),
+        deletions: z.number(),
+        files: z.number(),
+        diffs: Snapshot.FileDiff.array().optional(),
+    }).optional(),
+    share: z.object({ url: z.string() }).optional(),
+    permission: PermissionNext.Ruleset.optional(),
+    revert: z.object({                   // 回退点
+        messageID: z.string(),
+        partID: z.string().optional(),
+        snapshot: z.string().optional(),
+        diff: z.string().optional(),
+    }).optional(),
+    time: z.object({
+        created: z.number(),
+        updated: z.number(),
+        compacting: z.number().optional(),
+        archived: z.number().optional(),
+    }),
+})</code></pre>
+
+<h3>2.2 事件定义</h3>
+<pre><code>export const Event = {
+    Created: BusEvent.define("session.created", z.object({ info: Info })),
+    Updated: BusEvent.define("session.updated", z.object({ info: Info })),
+    Deleted: BusEvent.define("session.deleted", z.object({ info: Info })),
+    Diff: BusEvent.define("session.diff", z.object({
+        sessionID: z.string(),
+        diff: Snapshot.FileDiff.array(),
+    })),
+    Error: BusEvent.define("session.error", z.object({
+        sessionID: z.string().optional(),
+        error: MessageV2.Assistant.shape.error,
+    })),
+}</code></pre>
+
+<div class="tip">
+<strong>事件驱动设计：</strong>每次 Session 状态变更都通过 Bus.publish 发出事件，前端通过 SSE 订阅这些事件实现实时 UI 更新。Database.effect() 确保事件只在数据库事务提交后才发出。
+</div>
+</div>
+
+<!-- 第3章 -->
+<div class="section" id="ch3">
+<h2>三、Session CRUD 操作</h2>
+
+<table>
+<tr><th>操作</th><th>函数</th><th>说明</th></tr>
+<tr><td>创建</td><td><span class="inline-code">create()</span></td><td>生成 descending ID、slug、默认标题，发布 Created 事件</td></tr>
+<tr><td>分叉</td><td><span class="inline-code">fork()</span></td><td>复制消息到指定 messageID 为止，创建 "(fork #1)" 标题</td></tr>
+<tr><td>查询</td><td><span class="inline-code">get()</span> / <span class="inline-code">list()</span> / <span class="inline-code">listGlobal()</span></td><td>支持分页、搜索、归档过滤</td></tr>
+<tr><td>更新</td><td><span class="inline-code">touch()</span></td><td>更新 time_updated，发布 Updated 事件</td></tr>
+<tr><td>删除</td><td><span class="inline-code">remove()</span></td><td>递归删除子 Session，取消 share，CASCADE 删除消息</td></tr>
+<tr><td>消息</td><td><span class="inline-code">updateMessage()</span> / <span class="inline-code">updatePart()</span></td><td>upsert 到 SQLite，发布 PartUpdated 事件</td></tr>
+</table>
+
+<div class="card">
+<h3>ID 排序策略 — Descending</h3>
+<pre><code>// 使用 descending ID 确保最新 session 排在前面
+id: Identifier.descending("session", input.id)
+// 而 message 使用 ascending ID 确保时间顺序
+id: Identifier.ascending("message")</code></pre>
+<p>Session ID 是时间递减的 ULID，查询时按 <span class="inline-code">desc(SessionTable.time_updated)</span> 排序，最新的会话自然排在最前。</p>
+</div>
+</div>
+
+<!-- 第4章 -->
+<div class="section" id="ch4">
+<h2>四、ReAct 循环 — loop() 全景</h2>
+
+<p><span class="inline-code">loop()</span> 是 OpenCode 的心脏。它实现了经典的 <strong>ReAct（Reasoning + Acting）</strong>循环：</p>
+
+<svg viewBox="0 0 800 450" xmlns="http://www.w3.org/2000/svg">
+<rect x="300" y="10" width="200" height="40" rx="8" fill="#0369a1"/>
+<text x="400" y="35" text-anchor="middle" fill="white" font-size="14" font-weight="bold">loop() 入口</text>
+
+<line x1="400" y1="50" x2="400" y2="70" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+<rect x="250" y="70" width="300" height="36" rx="6" fill="#f1f5f9" stroke="#94a3b8"/>
+<text x="400" y="93" text-anchor="middle" fill="#334155" font-size="12">start/resume AbortController</text>
+
+<line x1="400" y1="106" x2="400" y2="130" stroke="#64748b" stroke-width="1.5"/>
+
+<!-- Main loop -->
+<rect x="200" y="130" width="400" height="300" rx="10" fill="none" stroke="#0369a1" stroke-width="2" stroke-dasharray="6"/>
+<text x="210" y="150" fill="#0369a1" font-size="12" font-weight="bold">while (true) — ReAct 主循环</text>
+
+<rect x="230" y="160" width="340" height="32" rx="6" fill="#dbeafe"/>
+<text x="400" y="181" text-anchor="middle" fill="#1e40af" font-size="12">1. filterCompacted — 获取压缩后的消息流</text>
+
+<rect x="230" y="200" width="340" height="32" rx="6" fill="#dbeafe"/>
+<text x="400" y="221" text-anchor="middle" fill="#1e40af" font-size="12">2. 检查 lastFinished — 是否已完成？break</text>
+
+<rect x="230" y="240" width="340" height="32" rx="6" fill="#dbeafe"/>
+<text x="400" y="261" text-anchor="middle" fill="#1e40af" font-size="12">3. step++ / ensureTitle (step=1时)</text>
+
+<rect x="230" y="280" width="340" height="32" rx="6" fill="#dbeafe"/>
+<text x="400" y="301" text-anchor="middle" fill="#1e40af" font-size="12">4. insertReminders — 注入 Plan/Build 提示</text>
+
+<rect x="230" y="320" width="340" height="32" rx="6" fill="#dbeafe"/>
+<text x="400" y="341" text-anchor="middle" fill="#1e40af" font-size="12">5. resolveTools — 解析可用工具集</text>
+
+<rect x="230" y="360" width="340" height="32" rx="6" fill="#dbeafe"/>
+<text x="400" y="381" text-anchor="middle" fill="#1e40af" font-size="12">6. processor.process() — LLM 流式调用 + 工具执行</text>
+
+<rect x="230" y="400" width="340" height="24" rx="6" fill="#fee2e2"/>
+<text x="400" y="417" text-anchor="middle" fill="#991b1b" font-size="11">结果：continue / stop / compact</text>
+
+<line x1="600" y1="412" x2="650" y2="412" stroke="#64748b" stroke-width="1"/>
+<line x1="650" y1="412" x2="650" y2="160" stroke="#64748b" stroke-width="1"/>
+<line x1="650" y1="160" x2="570" y2="160" stroke="#64748b" stroke-width="1" marker-end="url(#arrow)"/>
+<text x="670" y="290" fill="#64748b" font-size="11" transform="rotate(-90,670,290)">continue</text>
+
+<rect x="250" y="445" width="300" height="30" rx="6" fill="#dcfce7" stroke="#16a34a"/>
+<text x="400" y="465" text-anchor="middle" fill="#166534" font-size="12">返回最后一条 assistant 消息</text>
+</svg>
+</div>
+
+<!-- 第5章 -->
+<div class="section" id="ch5">
+<h2>五、循环入口：prompt() → loop()</h2>
+
+<pre><code>// session/prompt.ts
+export const prompt = fn(PromptInput, async (input) => {
+    const session = await Session.get(input.sessionID)
+    await SessionRevert.cleanup(session)      // 清理回退状态
+
+    // 1. 创建 user 消息
+    const message = await createUserMessage(input)
+    await Session.touch(input.sessionID)      // 更新时间戳
+
+    // 2. 向后兼容：tools 参数转为 permission
+    const permissions: PermissionNext.Ruleset = []
+    for (const [tool, enabled] of Object.entries(input.tools ?? {})) {
+        permissions.push({ permission: tool, action: enabled ? "allow" : "deny", pattern: "*" })
+    }
+
+    // 3. noReply 模式：只创建消息，不启动循环
+    if (input.noReply === true) return message
+
+    // 4. 启动 ReAct 循环
+    return loop({ sessionID: input.sessionID })
+})</code></pre>
+
+<div class="tip">
+<strong>noReply 模式：</strong>某些场景下只需要创建用户消息（如添加上下文引用），不需要 AI 响应。此时 <span class="inline-code">noReply: true</span> 跳过循环。
+</div>
+</div>
+
+<!-- 第6章 -->
+<div class="section" id="ch6">
+<h2>六、消息流重建与 filterCompacted</h2>
+
+<p>每次循环迭代开始时，都需要从数据库重建完整的消息流：</p>
+
+<pre><code>// loop() 内部
+let msgs = await MessageV2.filterCompacted(MessageV2.stream(sessionID))
+
+// 从后向前扫描，找到关键消息
+let lastUser, lastAssistant, lastFinished
+let tasks = []  // 待处理的 compaction/subtask
+for (let i = msgs.length - 1; i >= 0; i--) {
+    const msg = msgs[i]
+    if (!lastUser && msg.info.role === "user") lastUser = msg.info
+    if (!lastAssistant && msg.info.role === "assistant") lastAssistant = msg.info
+    if (!lastFinished && msg.info.role === "assistant" && msg.info.finish)
+        lastFinished = msg.info
+    // 收集待处理的任务（compaction 或 subtask）
+    const task = msg.parts.filter(p => p.type === "compaction" || p.type === "subtask")
+    if (task && !lastFinished) tasks.push(...task)
+}</code></pre>
+
+<div class="card">
+<h3>完成判断逻辑</h3>
+<pre><code>// 如果最后一条 assistant 消息已完成（非 tool-calls），且它在最后一条 user 之后
+if (
+    lastAssistant?.finish &&
+    !["tool-calls", "unknown"].includes(lastAssistant.finish) &&
+    lastUser.id &lt; lastAssistant.id
+) {
+    break  // 退出循环，AI 已完成响应
+}</code></pre>
+<p><span class="inline-code">finish</span> 字段的值来自 AI SDK 的 <span class="inline-code">finishReason</span>：
+<span class="inline-code">"stop"</span> = 正常结束，<span class="inline-code">"tool-calls"</span> = 需要执行工具后继续，<span class="inline-code">"unknown"</span> = 不确定。</p>
+</div>
+</div>
+
+<!-- 第7章 -->
+<div class="section" id="ch7">
+<h2>七、step 计数与 maxSteps 保护</h2>
+
+<pre><code>// loop() 中
+let step = 0
+while (true) {
+    step++
+    // ...
+    const agent = await Agent.get(lastUser.agent)
+    const maxSteps = agent.steps ?? Infinity    // Agent 配置的最大步数
+    const isLastStep = step >= maxSteps
+
+    // 最后一步注入 MAX_STEPS 提示
+    const result = await processor.process({
+        messages: [
+            ...MessageV2.toModelMessages(msgs, model),
+            ...(isLastStep ? [{
+                role: "assistant",
+                content: MAX_STEPS,   // 告知 AI 这是最后一步
+            }] : []),
+        ],
+        tools,
+        model,
+    })
+}</code></pre>
+
+<div class="warn">
+<strong>MAX_STEPS 机制：</strong>当 step 达到 maxSteps 时，不会强制终止循环，而是注入一条 assistant 消息（MAX_STEPS prompt），<strong>礼貌地告知 AI 不要再调用工具</strong>。AI 通常会在这一步给出最终总结。如果 AI 忽略提示继续调用工具，循环会继续（但不会再注入 MAX_STEPS）。
+</div>
+</div>
+
+<!-- 第8章 -->
+<div class="section" id="ch8">
+<h2>八、insertReminders — Plan/Build 上下文注入</h2>
+
+<p><span class="inline-code">insertReminders</span> 是 loop 中的关键钩子，它根据当前 Agent 和历史 Agent 动态注入 system prompt：</p>
+
+<div class="card">
+<h3>三种注入场景</h3>
+<table>
+<tr><th>场景</th><th>条件</th><th>注入内容</th></tr>
+<tr><td>进入 Plan 模式</td><td>当前 agent=plan，上一条 assistant 非 plan</td><td>完整的 Plan 工作流指引（5 个阶段）</td></tr>
+<tr><td>Plan→Build 切换</td><td>当前 agent=build，存在 plan assistant 消息</td><td>BUILD_SWITCH + plan 文件内容</td></tr>
+<tr><td>用户中途发消息</td><td>step > 1 且有未处理的 user 消息</td><td>&lt;system-reminder&gt; 包装用户消息</td></tr>
+</table>
+</div>
+
+<pre><code>// 用户中途发送消息的处理
+if (step > 1 && lastFinished) {
+    for (const msg of msgs) {
+        if (msg.info.role !== "user" || msg.info.id &lt;= lastFinished.id) continue
+        for (const part of msg.parts) {
+            if (part.type !== "text" || part.ignored || part.synthetic) continue
+            part.text = [
+                "&lt;system-reminder&gt;",
+                "The user sent the following message:",
+                part.text,
+                "",
+                "Please address this message and continue with your tasks.",
+                "&lt;/system-reminder&gt;",
+            ].join("\n")
+        }
+    }
+}</code></pre>
+
+<div class="tip">
+<strong>为什么需要 system-reminder 包装？</strong>当 AI 正在执行多步任务时，用户可能中途插入新消息。如果不加标记，AI 可能将新消息误认为是之前对话的一部分。system-reminder 标签明确告知 AI"这是用户新发的消息"。
+</div>
+</div>
+
+<!-- 第9章 -->
+<div class="section" id="ch9">
+<h2>九、resolveTools — 工具解析全流程</h2>
+
+<p><span class="inline-code">resolveTools()</span> 负责构建当前步骤的完整工具集：</p>
+
+<div class="step"><div class="num">1</div><div class="content"><strong>内置工具注册</strong> — <span class="inline-code">ToolRegistry.tools(model, agent)</span> 根据 Agent 权限过滤</div></div>
+<div class="step"><div class="num">2</div><div class="content"><strong>MCP 工具注入</strong> — <span class="inline-code">MCP.tools()</span> 添加所有已连接的 MCP 服务工具</div></div>
+<div class="step"><div class="num">3</div><div class="content"><strong>Plugin Hook</strong> — 每次工具执行前/后触发 <span class="inline-code">tool.execute.before/after</span></div></div>
+<div class="step"><div class="num">4</div><div class="content"><strong>Schema 转换</strong> — <span class="inline-code">ProviderTransform.schema()</span> 适配不同模型的 schema 差异</div></div>
+<div class="step"><div class="num">5</div><div class="content"><strong>结构化输出</strong> — 如果用户请求 JSON schema，注入 StructuredOutput 工具</div></div>
+
+<pre><code>// resolveTools 中的工具包装
+tools[item.id] = tool({
+    id: item.id,
+    description: item.description,
+    inputSchema: jsonSchema(schema),
+    async execute(args, options) {
+        const ctx = context(args, options)
+        // Plugin hook: before
+        await Plugin.trigger("tool.execute.before", { tool: item.id, ... }, { args })
+        // 权限检查
+        await ctx.ask({ permission: item.id, ... })
+        // 实际执行
+        const result = await item.execute(args, ctx)
+        // Plugin hook: after
+        await Plugin.trigger("tool.execute.after", { tool: item.id, ... }, output)
+        return output
+    },
+})</code></pre>
+</div>
+
+<!-- 第10章 -->
+<div class="section" id="ch10">
+<h2>十、SessionProcessor — 流式处理核心</h2>
+
+<p>SessionProcessor 是 ReAct 循环中处理 LLM 流输出的核心组件。它将 AI SDK 的流式事件转换为 OpenCode 的 Part 更新：</p>
+
+<pre><code>// session/processor.ts
+export function create(input: {
+    assistantMessage: MessageV2.Assistant
+    sessionID: string
+    model: Provider.Model
+    abort: AbortSignal
+}) {
+    let snapshot: string | undefined
+    let blocked = false
+    let needsCompaction = false
+
+    return {
+        async process(streamInput) {
+            while (true) {
+                const stream = await LLM.stream(streamInput)
+                for await (const value of stream.fullStream) {
+                    switch (value.type) {
+                        case "start-step":
+                            snapshot = await Snapshot.track()   // 步骤开始时记录快照
+                            await Session.updatePart({ type: "step-start", snapshot })
+                            break
+                        case "tool-call":
+                            // 更新工具状态为 running
+                            // 检测 doom loop（连续3次相同工具调用）
+                            break
+                        case "tool-result":
+                            // 更新工具状态为 completed
+                            break
+                        case "tool-error":
+                            // 如果是 PermissionDenied 或 QuestionRejected
+                            if (error instanceof Question.RejectedError)
+                                blocked = shouldBreak
+                            break
+                        case "finish-step":
+                            // 计算 token 使用量和成本
+                            // 记录步骤结束快照
+                            // 检查是否需要 compaction
+                            break
+                        case "text-delta":
+                            // 增量更新文本内容
+                            break
+                        case "reasoning-delta":
+                            // 增量更新推理内容
+                            break
+                    }
+                }
+                // 返回控制信号
+                if (needsCompaction) return "compact"
+                if (blocked) return "stop"
+                if (error) return "stop"
+                return "continue"
+            }
+        }
+    }
+}</code></pre>
+
+<div class="card">
+<h3>三种返回信号</h3>
+<table>
+<tr><th>返回值</th><th>含义</th><th>loop 行为</th></tr>
+<tr><td><span class="inline-code">"continue"</span></td><td>正常完成一步，AI 需要继续调用工具</td><td>继续 while 循环</td></tr>
+<tr><td><span class="inline-code">"stop"</span></td><td>用户拒绝权限/问题，或发生错误</td><td>退出循环</td></tr>
+<tr><td><span class="inline-code">"compact"</span></td><td>上下文即将溢出，需要压缩</td><td>触发 SessionCompaction.create()，然后 continue</td></tr>
+</table>
+</div>
+</div>
+
+<!-- 第11章 -->
+<div class="section" id="ch11">
+<h2>十一、Snapshot 追踪 — 每步 Diff 记录</h2>
+
+<p>每个 step 开始时，Processor 会记录一个 git tree hash 快照；step 结束时对比差异：</p>
+
+<pre><code>case "start-step":
+    snapshot = await Snapshot.track()     // git add . && git write-tree → hash
+    break
+
+case "finish-step":
+    if (snapshot) {
+        const patch = await Snapshot.patch(snapshot)  // git diff hash --name-only
+        if (patch.files.length) {
+            await Session.updatePart({
+                type: "patch",
+                hash: patch.hash,
+                files: patch.files,        // 本步骤修改的文件列表
+            })
+        }
+        snapshot = undefined
+    }
+    break</code></pre>
+
+<div class="tip">
+<strong>Patch Part 的作用：</strong>记录每一步修改了哪些文件，前端据此展示实时 diff 视图。用户可以在任何一步"回退"（revert），将整个工作区恢复到该步骤开始前的状态。
+</div>
+</div>
+
+<!-- 第12章 -->
+<div class="section" id="ch12">
+<h2>十二、Compaction 触发与上下文溢出处理</h2>
+
+<p>在 <span class="inline-code">finish-step</span> 处理中，Processor 检查是否需要 Compaction：</p>
+
+<pre><code>case "finish-step":
+    // 检查 token 使用量是否超过模型上下文的阈值
+    if (!input.assistantMessage.summary &&
+        await SessionCompaction.isOverflow({ tokens: usage.tokens, model: input.model })
+    ) {
+        needsCompaction = true
+    }
+    break
+
+// 流处理结束后
+if (needsCompaction) return "compact"</code></pre>
+
+<p>在 loop 中处理 compact 返回值：</p>
+
+<pre><code>// loop() 中
+if (result === "compact") {
+    // 创建 compaction 任务
+    await SessionCompaction.create({
+        sessionID,
+        agent: lastUser.agent,
+        model: lastUser.model,
+        auto: true,
+        overflow: !processor.message.finish,  // 是否因为溢出中断
+    })
+}
+continue  // 继续循环，下次迭代会处理 compaction 任务</code></pre>
+
+<div class="card">
+<h3>上下文溢出的两条路径</h3>
+<div class="step"><div class="num">A</div><div class="content"><strong>正常溢出</strong>：AI 完成了当前步骤（finish reason = stop），但 token 数超过阈值 → 自动压缩后继续</div></div>
+<div class="step"><div class="num">B</div><div class="content"><strong>异常溢出</strong>：AI SDK 抛出 ContextOverflowError → 步骤中断，标记 overflow=true → 紧急压缩</div></div>
+</div>
+</div>
+
+<!-- 第13章 -->
+<div class="section" id="ch13">
+<h2>十三、BusyError 与并发控制</h2>
+
+<p>每个 Session 同一时间只能有一个活跃的 ReAct 循环。并发保护通过 <span class="inline-code">AbortController</span> 状态字典实现：</p>
+
+<pre><code>// session/prompt.ts — state 字典
+const state = Instance.state(() => {
+    const data: Record&lt;string, {
+        abort: AbortController
+        callbacks: { resolve, reject }[]
+    }> = {}
+    return data
+})
+
+// 启动循环时注册
+function start(sessionID: string) {
+    const s = state()
+    if (s[sessionID]) return       // 已存在 → 返回 undefined → BusyError
+    const controller = new AbortController()
+    s[sessionID] = { abort: controller, callbacks: [] }
+    return controller.signal
+}
+
+// 检查是否忙碌
+export function assertNotBusy(sessionID: string) {
+    const match = state()[sessionID]
+    if (match) throw new Session.BusyError(sessionID)
+}
+
+// 第二个请求进入时的处理
+if (!abort) {
+    return new Promise((resolve, reject) => {
+        // 加入等待队列
+        state()[sessionID].callbacks.push({ resolve, reject })
+    })
+}</code></pre>
+
+<div class="warn">
+<strong>排队机制：</strong>如果第二个 prompt 请求到达时 Session 正在忙碌，它不会被拒绝，而是加入 <span class="inline-code">callbacks</span> 队列。当第一个循环完成后，队列中的回调会被 resolve，触发新的循环。
+</div>
+</div>
+
+<!-- 第14章 -->
+<div class="section" id="ch14">
+<h2>十四、标题生成 — ensureTitle 机制</h2>
+
+<p>在循环的第一步（step === 1），会异步触发标题生成：</p>
+
+<pre><code>// loop() 中
+if (step === 1)
+    ensureTitle({
+        session,
+        modelID: lastUser.model.modelID,
+        providerID: lastUser.model.providerID,
+        history: msgs,
+    })
+
+// ensureTitle 使用 title Agent
+// title Agent 是 hidden Agent，prompt 为 PROMPT_TITLE
+// 它的权限是 deny *（不使用任何工具），只做文本生成</code></pre>
+
+<div class="tip">
+<strong>异步非阻塞：</strong>标题生成是异步的，不会阻塞主循环。它使用独立的 title Agent（hidden、无工具权限），调用 <span class="inline-code">generateText</span> 而非 <span class="inline-code">streamText</span>，确保快速完成。
+</div>
+</div>
+
+<!-- 第15章 -->
+<div class="section" id="ch15">
+<h2>十五、完整生命周期总结</h2>
+
+<div class="card">
+<h3>Session 生命周期核心规律</h3>
+<table>
+<tr><th>规律</th><th>体现</th></tr>
+<tr><td><strong>消息流重建</strong></td><td>每次循环迭代都从 SQLite 重建消息流，filterCompacted 跳过已压缩的部分</td></tr>
+<tr><td><strong>step 计数保护</strong></td><td>maxSteps 配置 + MAX_STEPS prompt 注入，防止无限循环</td></tr>
+<tr><td><strong>三种退出信号</strong></td><td>continue / stop / compact，由 Processor 根据流处理结果返回</td></tr>
+<tr><td><strong>上下文自愈</strong></td><td>检测到溢出时自动创建 Compaction 任务，压缩后继续</td></tr>
+<tr><td><strong>快照追踪</strong></td><td>每步 start/finish 时记录 git tree hash，实现文件变更回溯</td></tr>
+<tr><td><strong>并发安全</strong></td><td>AbortController 字典 + callbacks 队列，确保同一 Session 不会并发执行</td></tr>
+<tr><td><strong>事件驱动</strong></td><td>每次状态变更都通过 Bus 发布事件，前端通过 SSE 实时响应</td></tr>
+<tr><td><strong>Plugin 钩子</strong></td><td>tool.execute.before/after、experimental.chat.messages.transform 等扩展点</td></tr>
+<tr><td><strong>用户中途插入</strong></td><td>system-reminder 包装中途消息，防止 AI 误解上下文</td></tr>
+</table>
+</div>
+
+<div class="tip">
+<strong>下一篇预告：</strong>SSE 事件总线与实时通信 — 深入 Bus.publish → GlobalBus → SSE stream → 前端订阅 的完整链路。
+</div>
+</div>
+
+</div>
+</body>
+</html>
+

@@ -1,0 +1,994 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OpenCode 上下文工程 - 示例篇：一次完整 ReAct 循环追踪</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body { background: #f8fafc; color: #1e293b; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.7; }
+.hero { background: linear-gradient(135deg, #1e293b 0%, #334155 50%, #475569 100%); color: white; padding: 80px 40px; text-align: center; }
+.hero h1 { font-size: 2.6em; margin-bottom: 16px; }
+.hero p { font-size: 1.15em; opacity: 0.9; max-width: 850px; margin: 0 auto; }
+.hero .badge { display: inline-block; background: rgba(255,255,255,0.15); padding: 6px 16px; border-radius: 20px; margin-top: 16px; font-size: 0.88em; }
+.container { max-width: 1100px; margin: 0 auto; padding: 40px 24px; }
+.chapter { margin-bottom: 48px; }
+.chapter h2 { font-size: 1.8em; color: #1e293b; border-left: 4px solid #3b82f6; padding-left: 16px; margin-bottom: 24px; }
+.chapter h3 { font-size: 1.3em; color: #334155; margin: 20px 0 12px; }
+.chapter h4 { font-size: 1.1em; color: #475569; margin: 16px 0 8px; }
+.card { background: white; border-radius: 12px; padding: 28px; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); border: 1px solid #e2e8f0; }
+.card.highlight { border-left: 4px solid #3b82f6; }
+.card.warn { border-left: 4px solid #f59e0b; }
+.card.success { border-left: 4px solid #10b981; }
+.card.danger { border-left: 4px solid #ef4444; }
+.card.purple { border-left: 4px solid #8b5cf6; }
+pre { background: #1e293b; color: #e2e8f0; padding: 20px; border-radius: 8px; overflow-x: auto; font-size: 0.85em; line-height: 1.6; margin: 12px 0; }
+code { font-family: 'JetBrains Mono', 'Fira Code', Consolas, monospace; }
+.ic { background: #f1f5f9; padding: 2px 8px; border-radius: 4px; font-size: 0.9em; color: #be185d; }
+table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 0.92em; }
+th, td { padding: 10px 14px; text-align: left; border-bottom: 1px solid #e2e8f0; }
+th { background: #f8fafc; font-weight: 600; color: #475569; }
+.tag { display: inline-block; padding: 2px 10px; border-radius: 12px; font-size: 0.78em; font-weight: 600; margin: 2px; }
+.tag-blue { background: #dbeafe; color: #1d4ed8; }
+.tag-green { background: #d1fae5; color: #059669; }
+.tag-amber { background: #fef3c7; color: #d97706; }
+.tag-purple { background: #ede9fe; color: #7c3aed; }
+.tag-red { background: #fee2e2; color: #dc2626; }
+.tag-cyan { background: #cffafe; color: #0891b2; }
+.tag-gray { background: #f1f5f9; color: #475569; }
+.note { background: #eff6ff; border: 1px solid #bfdbfe; padding: 16px; border-radius: 8px; margin: 12px 0; }
+.note strong { color: #1d4ed8; }
+.note.warn-note { background: #fffbeb; border-color: #fde68a; }
+.note.warn-note strong { color: #d97706; }
+ul, ol { padding-left: 24px; margin: 8px 0; }
+li { margin: 6px 0; }
+svg { max-width: 100%; margin: 16px 0; }
+.phase { border: 2px solid #e2e8f0; border-radius: 16px; padding: 24px; margin: 24px 0; position: relative; }
+.phase-label { position: absolute; top: -14px; left: 24px; background: #3b82f6; color: white; padding: 4px 16px; border-radius: 20px; font-weight: 700; font-size: 0.9em; }
+.phase-label.step2 { background: #10b981; }
+.phase-label.step3 { background: #f59e0b; }
+.phase-label.step4 { background: #8b5cf6; }
+.model-view { background: #f0f9ff; border: 2px dashed #93c5fd; border-radius: 12px; padding: 20px; margin: 12px 0; }
+.model-view h4 { color: #1d4ed8; margin-top: 0; }
+.tool-result { background: #f0fdf4; border: 2px dashed #86efac; border-radius: 12px; padding: 20px; margin: 12px 0; }
+.tool-result h4 { color: #059669; margin-top: 0; }
+.decision { background: #fefce8; border: 2px dashed #fde047; border-radius: 12px; padding: 20px; margin: 12px 0; }
+.decision h4 { color: #ca8a04; margin-top: 0; }
+.grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+@media (max-width: 768px) { .grid-2 { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+
+<div class="hero">
+  <h1>OpenCode 上下文工程 - 示例篇</h1>
+  <p>追踪一次完整的 ReAct 循环：从用户输入到最终输出，每一步给模型看了什么、模型如何决策、工具结果如何回传</p>
+  <div class="badge">场景：用户请求修复 parseConfig 函数 Bug | 模型：Claude Sonnet | 共 4 轮 ReAct 循环</div>
+</div>
+
+<div class="container">
+
+<!-- TOC -->
+<div style="background: white; border: 2px solid #e2e8f0; border-radius: 12px; padding: 24px; margin-bottom: 28px;">
+  <h3 style="color: #2563eb; margin-bottom: 12px; font-size: 1.15em;">📑 目录</h3>
+  <ol style="columns: 2; column-gap: 30px; padding-left: 22px;">
+    <li style="margin: 6px 0;"><a href="#s1" style="color: #1e293b; text-decoration: none;">场景设定</a></li>
+    <li style="margin: 6px 0;"><a href="#s2" style="color: #1e293b; text-decoration: none;">Phase 0：用户消息创建 (createUserMessage)</a></li>
+    <li style="margin: 6px 0;"><a href="#s3" style="color: #1e293b; text-decoration: none;">Phase 1：Loop Step 1 — 第一次 LLM 调用</a></li>
+    <li style="margin: 6px 0;"><a href="#s4" style="color: #1e293b; text-decoration: none;">Phase 2：Loop Step 2 — 第二次 LLM 调用</a></li>
+    <li style="margin: 6px 0;"><a href="#s5" style="color: #1e293b; text-decoration: none;">Phase 3：Loop Step 3 — 第三次 LLM 调用</a></li>
+    <li style="margin: 6px 0;"><a href="#s6" style="color: #1e293b; text-decoration: none;">Phase 4：Loop Step 4 — 最终输出</a></li>
+    <li style="margin: 6px 0;"><a href="#s7" style="color: #1e293b; text-decoration: none;">上下文增长全景图</a></li>
+    <li style="margin: 6px 0;"><a href="#s8" style="color: #1e293b; text-decoration: none;">Step > 1 时的用户消息包装机制</a></li>
+    <li style="margin: 6px 0;"><a href="#s9" style="color: #1e293b; text-decoration: none;">Processor 内部事件流 — 工具调用的全生命周期</a></li>
+    <li style="margin: 6px 0;"><a href="#s10" style="color: #1e293b; text-decoration: none;">完整时序图 — 用户视角 vs 模型视角 vs 系统视角</a></li>
+    <li style="margin: 6px 0;"><a href="#s11" style="color: #1e293b; text-decoration: none;">关键数据流 — 工具结果的格式转换</a></li>
+    <li style="margin: 6px 0;"><a href="#s12" style="color: #1e293b; text-decoration: none;">核心规律总结</a></li>
+  </ol>
+</div>
+
+<!-- ===== 场景设定 ===== -->
+<div class="chapter" id="s1">
+  <h2>场景设定</h2>
+  <div class="card highlight">
+    <h3>用户输入</h3>
+    <div style="background: #f8fafc; padding: 16px; border-radius: 8px; font-size: 1.1em; border: 1px solid #e2e8f0;">
+      <strong>用户：</strong>"帮我修复 src/utils.ts 中的 parseConfig 函数 bug，它在解析嵌套对象时会报 TypeError"
+    </div>
+    <p style="margin-top: 12px;"><strong>环境设定：</strong></p>
+    <table>
+      <tr><td>模型</td><td>claude-sonnet-4-5-20250929 (Anthropic)</td></tr>
+      <tr><td>Agent</td><td>build（默认 Agent，拥有全部工具权限）</td></tr>
+      <tr><td>工作目录</td><td>/home/user/my-project</td></tr>
+      <tr><td>Git</td><td>是</td></tr>
+      <tr><td>平台</td><td>linux</td></tr>
+      <tr><td>项目配置文件</td><td>AGENTS.md（含 lint 规则）</td></tr>
+    </table>
+  </div>
+
+  <svg viewBox="0 0 900 100" xmlns="http://www.w3.org/2000/svg">
+    <rect x="10" y="25" width="130" height="50" rx="10" fill="#dbeafe" stroke="#3b82f6" stroke-width="2"/>
+    <text x="75" y="55" text-anchor="middle" font-size="13" font-weight="700" fill="#1e293b">用户输入</text>
+    <line x1="140" y1="50" x2="185" y2="50" stroke="#94a3b8" stroke-width="2" marker-end="url(#a)"/>
+    <rect x="190" y="25" width="130" height="50" rx="10" fill="#d1fae5" stroke="#10b981" stroke-width="2"/>
+    <text x="255" y="45" text-anchor="middle" font-size="12" font-weight="700" fill="#1e293b">Step 1</text>
+    <text x="255" y="62" text-anchor="middle" font-size="10" fill="#475569">Read 工具</text>
+    <line x1="320" y1="50" x2="365" y2="50" stroke="#94a3b8" stroke-width="2" marker-end="url(#a)"/>
+    <rect x="370" y="25" width="130" height="50" rx="10" fill="#fef3c7" stroke="#f59e0b" stroke-width="2"/>
+    <text x="435" y="45" text-anchor="middle" font-size="12" font-weight="700" fill="#1e293b">Step 2</text>
+    <text x="435" y="62" text-anchor="middle" font-size="10" fill="#475569">Edit 工具</text>
+    <line x1="500" y1="50" x2="545" y2="50" stroke="#94a3b8" stroke-width="2" marker-end="url(#a)"/>
+    <rect x="550" y="25" width="130" height="50" rx="10" fill="#ede9fe" stroke="#8b5cf6" stroke-width="2"/>
+    <text x="615" y="45" text-anchor="middle" font-size="12" font-weight="700" fill="#1e293b">Step 3</text>
+    <text x="615" y="62" text-anchor="middle" font-size="10" fill="#475569">Bash 测试</text>
+    <line x1="680" y1="50" x2="725" y2="50" stroke="#94a3b8" stroke-width="2" marker-end="url(#a)"/>
+    <rect x="730" y="25" width="160" height="50" rx="10" fill="#fee2e2" stroke="#ef4444" stroke-width="2"/>
+    <text x="810" y="45" text-anchor="middle" font-size="12" font-weight="700" fill="#1e293b">Step 4</text>
+    <text x="810" y="62" text-anchor="middle" font-size="10" fill="#475569">总结输出 → 退出</text>
+    <defs><marker id="a" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#94a3b8"/></marker></defs>
+  </svg>
+</div>
+
+<!-- ===== Phase 0: 用户消息创建 ===== -->
+<div class="chapter" id="s2">
+  <h2>Phase 0：用户消息创建 (createUserMessage)</h2>
+  <div class="card">
+    <p>用户按下回车后，<span class="ic">prompt()</span> 函数首先调用 <span class="ic">createUserMessage()</span>，将输入解析并持久化为内部消息结构：</p>
+    <pre><code>// 内部数据结构（简化）
+const userMessage: MessageV2.User = {
+    id: "msg_01HXK...",         // ULID 递增 ID
+    role: "user",
+    sessionID: "ses_01HXK...",
+    agent: "build",              // 默认 Agent
+    model: {
+        providerID: "anthropic",
+        modelID: "claude-sonnet-4-5-20250929",
+    },
+    time: { created: 1718300000000 },
+}
+
+const textPart: MessageV2.TextPart = {
+    id: "part_01HXK...",
+    messageID: "msg_01HXK...",
+    sessionID: "ses_01HXK...",
+    type: "text",
+    text: "帮我修复 src/utils.ts 中的 parseConfig 函数 bug，它在解析嵌套对象时会报 TypeError",
+}
+// → 持久化到 SQLite → 进入 loop()</code></pre>
+    <div class="note">
+      <strong>关键点：</strong>用户输入被拆分为 parts 数组（TextPart / FilePart / AgentPart），每个 part 独立持久化。如果用户附带了文件（如截图），会创建额外的 FilePart。
+    </div>
+  </div>
+</div>
+
+<!-- ===== Phase 1: Step 1 — 第一次 LLM 调用 ===== -->
+<div class="chapter" id="s3">
+  <h2>Phase 1：Loop Step 1 — 第一次 LLM 调用</h2>
+
+  <div class="phase">
+    <div class="phase-label">Step 1 开始</div>
+
+    <div class="model-view">
+      <h4>模型看到的 System Prompt（第一层 — Provider Prompt: anthropic.txt）</h4>
+      <pre><code>You are OpenCode, the best coding agent on the planet.
+
+You are an interactive CLI tool that helps users with software engineering tasks.
+Use the instructions below and the tools available to you to assist the user.
+
+IMPORTANT: You must NEVER generate or guess URLs for the user...
+
+# Tone and style
+- Only use emojis if the user explicitly requests it...
+- Your output will be displayed on a command line interface...
+
+# Professional objectivity
+Prioritize technical accuracy and truthfulness over validating the user's beliefs...
+
+# Task Management
+You have access to the TodoWrite tools to help you manage and plan tasks.
+Use these tools VERY frequently to ensure that you are tracking your tasks...
+
+# Tool usage policy
+- When doing file search, prefer to use the Task tool...
+- Use specialized tools instead of bash commands when possible...
+- VERY IMPORTANT: When exploring the codebase...use the Task tool...
+
+# Code References
+When referencing specific functions...include the pattern `file_path:line_number`...</code></pre>
+    </div>
+
+    <div class="model-view">
+      <h4>模型看到的 System Prompt（第二层 — Environment + Instructions）</h4>
+      <pre><code>You are powered by the model named claude-sonnet-4-5-20250929.
+The exact model ID is anthropic/claude-sonnet-4-5-20250929
+Here is some useful information about the environment you are running in:
+&lt;env&gt;
+  Working directory: /home/user/my-project
+  Is directory a git repo: yes
+  Platform: linux
+  Today's date: Fri Jun 13 2026
+&lt;/env&gt;
+
+Instructions from: /home/user/my-project/AGENTS.md
+## Style Guide
+- Use TypeScript strict mode
+- Prefer functional patterns
+- Run `bun run lint` before committing</code></pre>
+    </div>
+
+    <div class="model-view">
+      <h4>模型看到的 Messages（仅 1 条用户消息）</h4>
+      <pre><code>[
+  {
+    role: "user",
+    content: [
+      {
+        type: "text",
+        text: "帮我修复 src/utils.ts 中的 parseConfig 函数 bug，它在解析嵌套对象时会报 TypeError"
+      }
+    ]
+  }
+]</code></pre>
+    </div>
+
+    <div class="model-view">
+      <h4>模型看到的 Tools（完整工具列表 — 约 18 个内置工具）</h4>
+      <pre><code>// 每个工具包含 id + description + inputSchema（JSON Schema）
+// 以下是简化的工具描述列表：
+
+read       — "Read a file or directory from the local filesystem..."
+edit       — "Performs exact string replacements in files..."
+write      — "Use this tool to create a new file or overwrite an existing file..."
+bash       — "Execute a shell command in the terminal..."
+glob       — "Search for files by glob pattern..."
+grep       — "Search file contents using regular expressions..."
+task       — "Launch a new agent to handle a complex task..."
+todowrite  — "Use this tool to create and manage a todo list..."
+webfetch   — "Fetches the main content from a web page..."
+websearch  — "Explore the web for real-time information..."
+question   — "Ask the user a clarifying question..."
+// ... 以及 multiedit, apply_patch, skill, plan_exit 等
+
+// 注意：disabled() 预过滤会移除被全局 deny 的工具
+// 如果 permission 规则 deny 了 "bash"，模型将完全看不到 bash 工具</code></pre>
+    </div>
+  </div>
+
+  <div class="decision">
+    <h4>模型决策 #1：Reasoning（推理）</h4>
+    <pre><code>// 模型的 Reasoning 过程（thinking tokens）
+用户说 parseConfig 在解析嵌套对象时报 TypeError。我需要：
+1. 先读取 src/utils.ts 文件，找到 parseConfig 函数
+2. 理解代码逻辑，定位 bug
+3. 修复 bug
+4. 验证修复
+
+先从第一步开始——读取文件。我需要用 Read 工具读取 /home/user/my-project/src/utils.ts。</code></pre>
+
+    <h4>模型输出 #1：Tool Call</h4>
+    <pre><code>// 模型返回的 tool_use block
+{
+  type: "tool_use",
+  id: "toolu_01HXK...",
+  name: "read",
+  input: {
+    filePath: "/home/user/my-project/src/utils.ts"
+  }
+}
+// finish_reason: "tool_use"（不是 stop/end_turn）</code></pre>
+  </div>
+
+  <div class="card warn">
+    <h3>Loop 判断：finish_reason = "tool_use" → continue（不退出）</h3>
+    <p>因为模型返回的是 tool call 而非 stop，<span class="ic">processor.process()</span> 执行工具后返回 "continue"。loop() 进入下一轮迭代。</p>
+  </div>
+
+  <div class="tool-result">
+    <h4>工具执行：Read Tool</h4>
+    <p>AI SDK 自动执行工具，经过以下链式处理：</p>
+    <pre><code>// 执行链：
+// 1. Plugin.trigger("tool.execute.before", {tool: "read"}, {args})
+// 2. ReadTool.execute({filePath: "/home/user/my-project/src/utils.ts"}, ctx)
+//    2a. assertExternalDirectory() — 检查路径是否在允许范围内
+//    2b. ctx.ask({permission: "read", patterns: [filepath]}) — 请求权限
+//        → 如果 permission 规则为 "allow"：自动通过
+//        → 如果无规则：弹出确认对话框给用户
+//    2c. createReadStream() — 读取文件内容
+//    2d. InstructionPrompt.resolve() — 查找目录链中的 AGENTS.md
+//        → 发现 /home/user/my-project/src/ 下没有 AGENTS.md
+//        → 但 /home/user/my-project/AGENTS.md 已在 System Prompt 中
+//    2e. 格式化输出：每行加行号
+// 3. Plugin.trigger("tool.execute.after", {tool: "read"}, result)</code></pre>
+
+    <h4>Read 工具返回给模型的实际输出：</h4>
+    <pre><code>&lt;path&gt;/home/user/my-project/src/utils.ts&lt;/path&gt;
+&lt;type&gt;file&lt;/type&gt;
+&lt;content&gt;
+1: import { Config } from './types'
+2:
+3: export function parseConfig(raw: unknown): Config {
+4:   if (typeof raw !== 'object' || raw === null) {
+5:     throw new Error('Invalid config')
+6:   }
+7:   const obj = raw as Record&lt;string, unknown&gt;
+8:   return {
+9:     name: String(obj.name ?? ''),
+10:     database: {
+11:       host: String(obj.database.host ?? 'localhost'),
+12:       port: Number(obj.database.port ?? 5432),
+13:       credentials: {
+14:         username: String(obj.database.credentials.username ?? 'admin'),
+15:         password: String(obj.database.credentials.password ?? ''),
+16:       }
+17:     }
+18:   }
+19: }
+20:
+21: export function validateConfig(config: Config): boolean {
+22:   // ...
+23: }
+
+(End of file - total 45 lines)
+&lt;/content&gt;</code></pre>
+    <div class="note">
+      <strong>注意行号格式：</strong>每行以 <code>行号: 内容</code> 格式返回，方便模型精确引用行号进行编辑。
+    </div>
+  </div>
+</div>
+
+<!-- ===== Phase 2: Step 2 — 第二次 LLM 调用 ===== -->
+<div class="chapter" id="s4">
+  <h2>Phase 2：Loop Step 2 — 第二次 LLM 调用</h2>
+
+  <div class="phase">
+    <div class="phase-label step2">Step 2 开始</div>
+
+    <div class="model-view">
+      <h4>模型看到的 System Prompt — 与 Step 1 完全相同</h4>
+      <p style="color: #475569;">System Prompt 在每轮循环中重新构建，但内容不变（同一 Agent、同一模型、同一环境）。Prompt Caching 会复用 KV-cache。</p>
+    </div>
+
+    <div class="model-view">
+      <h4>模型看到的 Messages — 现在是 3 条（用户 + 助手工具调用 + 工具结果）</h4>
+      <pre><code>[
+  // === 用户消息（原始） ===
+  {
+    role: "user",
+    content: [
+      { type: "text",
+        text: "帮我修复 src/utils.ts 中的 parseConfig 函数 bug，它在解析嵌套对象时会报 TypeError" }
+    ]
+  },
+
+  // === 助手消息（Step 1 的模型输出） ===
+  {
+    role: "assistant",
+    content: [
+      { type: "text",
+        text: "Let me first read the file to understand the current implementation." },
+      { type: "tool-read",         // ← 工具调用
+        state: "output-available",
+        toolCallId: "toolu_01HXK...",
+        input: { filePath: "/home/user/my-project/src/utils.ts" },
+        output: "&lt;path&gt;/home/user/my-project/src/utils.ts&lt;/path&gt;\n..." // 完整文件内容
+      }
+    ]
+  }
+]
+
+// 注意：AI SDK 会将 tool_use + tool_result 合并到同一条 assistant 消息中
+// 这是 toModelMessages() 的转换结果</code></pre>
+    </div>
+
+    <div class="note warn-note">
+      <strong>关键洞察：</strong>模型在 Step 2 看到的不是"工具执行了"，而是"我（模型）之前决定调用了 read 工具，现在结果在这里"。这就是 ReAct 的核心——模型看到自己的历史决策和结果，据此做出下一步决策。
+    </div>
+  </div>
+
+  <div class="decision">
+    <h4>模型决策 #2：Reasoning（推理）</h4>
+    <pre><code>// 模型的 Reasoning 过程
+我看到 parseConfig 函数的问题了。在第 11-15 行：
+
+  obj.database.host
+  obj.database.port
+  obj.database.credentials.username
+  obj.database.credentials.password
+
+如果 raw 对象中 database 字段不存在或为 undefined，
+那么 obj.database 就是 undefined，
+访问 obj.database.host 就会抛 TypeError: Cannot read properties of undefined。
+
+同样的问题存在于 credentials 层——如果 database.credentials 不存在，
+访问 .username 也会报错。
+
+修复方案：使用可选链 (?.) 和空值合并 (??)，
+或者先检查嵌套对象是否存在。
+
+让我使用 Edit 工具修复这段代码。</code></pre>
+
+    <h4>模型输出 #2：Text + Tool Call</h4>
+    <pre><code>// 模型先输出一段文本（给用户看的）
+{
+  type: "text",
+  text: "I can see the issue. On lines 11-15, `obj.database` is accessed directly
+  without checking if it exists. If the config doesn't have a `database` key,
+  this will throw a TypeError. Let me fix this with optional chaining."
+}
+
+// 然后输出工具调用
+{
+  type: "tool_use",
+  id: "toolu_02HXK...",
+  name: "edit",
+  input: {
+    filePath: "/home/user/my-project/src/utils.ts",
+    oldString: "    database: {\n      host: String(obj.database.host ?? 'localhost'),\n      port: Number(obj.database.port ?? 5432),\n      credentials: {\n        username: String(obj.database.credentials.username ?? 'admin'),\n        password: String(obj.database.credentials.password ?? ''),\n      }\n    }",
+    newString: "    database: {\n      host: String((obj.database as any)?.host ?? 'localhost'),\n      port: Number((obj.database as any)?.port ?? 5432),\n      credentials: {\n        username: String((obj.database as any)?.credentials?.username ?? 'admin'),\n        password: String((obj.database as any)?.credentials?.password ?? ''),\n      }\n    }"
+  }
+}
+// finish_reason: "tool_use"</code></pre>
+  </div>
+
+  <div class="tool-result">
+    <h4>工具执行：Edit Tool — 9 层 Replacer 瀑布</h4>
+    <pre><code>// Edit 工具内部执行链：
+// 1. 权限请求：ctx.ask({permission: "edit", patterns: [filepath]})
+// 2. FileTime 检查：确保文件没有被外部修改
+// 3. 9 层 Replacer 策略依次尝试匹配 oldString：
+//    ① SimpleReplacer      — 精确字符串匹配 ✓ 命中！
+//    ② LineTrimmedReplacer  — 行尾空白忽略
+//    ③ BlockAnchorReplacer  — 块锚点 + Levenshtein 距离
+//    ④ WhitespaceNormalized — 空白归一化
+//    ⑤ IndentationFlexible  — 缩进灵活匹配
+//    ⑥ EscapeNormalized     — 转义归一化
+//    ⑦ TrimmedBoundary      — 边界裁剪
+//    ⑧ ContextAware          — 上下文感知
+//    ⑨ MultiOccurrence       — 多处匹配
+//
+// 4. SimpleReplacer 精确匹配成功 → 执行替换
+// 5. LSP 诊断：获取替换后的编译错误信息
+// 6. 生成 diff
+
+// 返回给模型的输出：
+{
+  title: "src/utils.ts",
+  output: "```diff\n--- src/utils.ts\n+++ src/utils.ts
+@@ -8,9 +8,9 @@
+   return {
+     name: String(obj.name ?? ''),
+     database: {
+-      host: String(obj.database.host ?? 'localhost'),
+-      port: Number(obj.database.port ?? 5432),
++      host: String((obj.database as any)?.host ?? 'localhost'),
++      port: Number((obj.database as any)?.port ?? 5432),
+       credentials: {
+-        username: String(obj.database.credentials.username ?? 'admin'),
+-        password: String(obj.database.credentials.password ?? ''),
++        username: String((obj.database as any)?.credentials?.username ?? 'admin'),
++        password: String((obj.database as any)?.credentials?.password ?? ''),
+       }
+     }
+   }
+```",
+  metadata: { diagnostics: [...], success: true }
+}</code></pre>
+  </div>
+</div>
+
+<!-- ===== Phase 3: Step 3 — 第三次 LLM 调用 ===== -->
+<div class="chapter" id="s5">
+  <h2>Phase 3：Loop Step 3 — 第三次 LLM 调用</h2>
+
+  <div class="phase">
+    <div class="phase-label step3">Step 3 开始</div>
+
+    <div class="model-view">
+      <h4>模型看到的 Messages — 现在是 5 条消息</h4>
+      <pre><code>[
+  // ① 用户原始消息
+  { role: "user", content: [{ type: "text", text: "帮我修复..." }] },
+
+  // ② Step 1 助手输出（text + read 工具调用 + 结果）
+  { role: "assistant", content: [
+      { type: "text", text: "Let me first read..." },
+      { type: "tool-read", state: "output-available",
+        toolCallId: "toolu_01HXK...",
+        input: { filePath: "..." },
+        output: "&lt;path&gt;...&lt;/path&gt;...文件完整内容..." }
+  ]},
+
+  // ③ Step 2 助手输出（text + edit 工具调用 + diff 结果）
+  { role: "assistant", content: [
+      { type: "text", text: "I can see the issue..." },
+      { type: "tool-edit", state: "output-available",
+        toolCallId: "toolu_02HXK...",
+        input: { filePath: "...", oldString: "...", newString: "..." },
+        output: "```diff\n--- ...\n+++ ...\n```" }
+  ]}
+]</code></pre>
+      <div class="note">
+        <strong>上下文在每轮增长：</strong>Step 1 只有用户消息；Step 2 增加了 read 结果；Step 3 增加了 edit diff。每轮循环，模型看到的历史越来越长——这就是为什么需要 Compaction 机制。
+      </div>
+    </div>
+  </div>
+
+  <div class="decision">
+    <h4>模型决策 #3：Reasoning（推理）</h4>
+    <pre><code>// 模型的 Reasoning 过程
+Edit 成功应用了，diff 显示替换正确。
+但我用了 `as any` 类型断言，这可能触发 lint 错误。
+让我改用更好的方式——先解构出 database 对象并提供默认值。
+
+另外，我应该运行测试来验证修复。
+根据 AGENTS.md 中的指示，需要运行 `bun run lint`。
+
+让我再优化一下代码，同时运行测试。</code></pre>
+
+    <h4>模型输出 #3：Edit 优化 + Bash 运行测试（两个工具调用）</h4>
+    <pre><code>// 模型可以一次返回多个工具调用（并行）
+
+// 工具调用 A：再次优化 Edit
+{
+  type: "tool_use",
+  id: "toolu_03HXK...",
+  name: "edit",
+  input: {
+    filePath: "/home/user/my-project/src/utils.ts",
+    oldString: "(obj.database as any)?.host",
+    newString: "(obj.database as Record&lt;string, any&gt; | undefined)?.host"
+    // ... 类似的优化
+  }
+}
+
+// 工具调用 B：运行 lint 检查
+{
+  type: "tool_use",
+  id: "toolu_04HXK...",
+  name: "bash",
+  input: {
+    command: "cd /home/user/my-project && bun run lint"
+  }
+}</code></pre>
+  </div>
+
+  <div class="tool-result">
+    <h4>工具执行：Bash Tool — Tree-sitter AST 解析</h4>
+    <pre><code>// Bash 工具执行链：
+// 1. Tree-sitter 解析命令 AST：
+//    "cd /home/user/my-project && bun run lint"
+//    → 子命令: [cd, bun]
+//    → 路径提取: /home/user/my-project
+//    → assertExternalDirectory: 路径在工作目录内 ✓
+//
+// 2. 权限请求：
+//    ctx.ask({
+//      permission: "bash",
+//      patterns: ["cd /home/user/my-project && bun run lint"],
+//      always: ["bun run"]  // ← BashArity.prefix() 生成
+//    })
+//    → "always" 模式：如果用户之前批准过 "bun run"，自动通过
+//
+// 3. spawn 执行：
+//    shell -c "cd /home/user/my-project && bun run lint"
+//    → 捕获 stdout + stderr
+//    → 超时控制（默认 120 秒）
+
+// 返回给模型的输出：
+{
+  title: "bun run lint",
+  output: "$ bun run lint
+> eslint src/
+  src/utils.ts:11:14  warning  Unexpected any type assertion  @typescript-eslint/no-explicit-any
+
+✖ 1 problem (0 errors, 1 warning)",
+  metadata: { exitCode: 0 }
+}</code></pre>
+    <div class="note warn-note">
+      <strong>Doom Loop 检测：</strong>如果模型连续 3 次用<strong>完全相同的参数</strong>调用同一个工具，<span class="ic">processor.ts</span> 会触发 <code>doom_loop</code> 权限请求，让用户确认是否继续（防止无限循环）。
+    </div>
+  </div>
+</div>
+
+<!-- ===== Phase 4: Step 4 — 最终输出 ===== -->
+<div class="chapter" id="s6">
+  <h2>Phase 4：Loop Step 4 — 最终输出</h2>
+
+  <div class="phase">
+    <div class="phase-label step4">Step 4 开始</div>
+
+    <div class="model-view">
+      <h4>模型看到的 Messages — 现在包含完整的操作历史</h4>
+      <pre><code>[
+  { role: "user", content: [...] },                    // 原始请求
+  { role: "assistant", content: [read调用+结果] },      // Step 1
+  { role: "assistant", content: [edit调用+diff] },      // Step 2
+  { role: "assistant", content: [                      // Step 3
+      edit优化调用+结果,
+      bash lint调用+结果
+  ]}
+]</code></pre>
+    </div>
+  </div>
+
+  <div class="decision">
+    <h4>模型决策 #4：Reasoning（推理）</h4>
+    <pre><code>// 模型的 Reasoning 过程
+Lint 只有 1 个 warning（关于 any 类型断言），没有 error。
+修复已正确应用，没有引入新的问题。
+
+我还有 1 个 warning 关于 `@typescript-eslint/no-explicit-any`。
+让我修复这个——用类型安全的替代方案。
+
+修复完成后，给用户总结。不再需要更多工具调用了。</code></pre>
+
+    <h4>模型输出 #4：Edit + 最终文本（finish_reason: "stop"）</h4>
+    <pre><code>// 最后一次 Edit
+{
+  type: "tool_use",
+  name: "edit",
+  input: {
+    filePath: "/home/user/my-project/src/utils.ts",
+    oldString: "(obj.database as Record&lt;string, any&gt; | undefined)",
+    newString: "((obj.database ?? {}) as Record&lt;string, unknown&gt;)"
+  }
+}
+
+// 最终文本输出
+{
+  type: "text",
+  text: "Fixed the `parseConfig` function in `src/utils.ts:10-16`.
+
+**Root cause:** `obj.database` was accessed directly without null checks.
+When the config object lacked a `database` key, accessing `.host` threw TypeError.
+
+**Fix:** Added null-safe access with `(obj.database ?? {})` fallback.
+Lint passes with no errors."
+}
+
+// finish_reason: "stop" ← 模型主动结束，不再调用工具</code></pre>
+  </div>
+
+  <div class="card success">
+    <h3>Loop 退出：finish_reason = "stop"</h3>
+    <pre><code>// prompt.ts - loop() 退出逻辑
+const modelFinished = processor.message.finish
+    && !["tool-calls", "unknown"].includes(processor.message.finish)
+
+// modelFinished = true (finish = "stop")
+// → break 退出 while(true)
+
+// 退出后执行：
+SessionCompaction.prune({sessionID})  // 裁剪旧工具输出
+// → 返回最终助手消息给调用方</code></pre>
+  </div>
+</div>
+
+<!-- ===== 上下文增长可视化 ===== -->
+<div class="chapter" id="s7">
+  <h2>上下文增长全景图</h2>
+  <div class="card highlight">
+    <svg viewBox="0 0 900 360" xmlns="http://www.w3.org/2000/svg">
+      <!-- 标题 -->
+      <text x="450" y="25" text-anchor="middle" font-size="14" font-weight="700" fill="#1e293b">每轮循环中模型看到的上下文总量</text>
+
+      <!-- Step 1 -->
+      <rect x="80" y="50" width="160" height="40" rx="6" fill="#dbeafe" stroke="#3b82f6" stroke-width="1.5"/>
+      <text x="160" y="65" text-anchor="middle" font-size="10" font-weight="600" fill="#1e293b">System Prompt (~3K tokens)</text>
+      <text x="160" y="80" text-anchor="middle" font-size="9" fill="#475569">anthropic.txt + env + AGENTS.md</text>
+      <rect x="80" y="95" width="160" height="25" rx="6" fill="#d1fae5" stroke="#10b981" stroke-width="1.5"/>
+      <text x="160" y="112" text-anchor="middle" font-size="10" fill="#1e293b">用户消息 (~50 tokens)</text>
+      <rect x="80" y="125" width="160" height="20" rx="4" fill="#fef3c7" stroke="#f59e0b" stroke-width="1"/>
+      <text x="160" y="139" text-anchor="middle" font-size="9" fill="#1e293b">18 个工具定义 (~4K tokens)</text>
+      <text x="160" y="170" text-anchor="middle" font-size="11" font-weight="700" fill="#3b82f6">≈ 7K tokens</text>
+
+      <!-- Step 2 -->
+      <rect x="290" y="50" width="160" height="40" rx="6" fill="#dbeafe" stroke="#3b82f6" stroke-width="1.5"/>
+      <text x="370" y="65" text-anchor="middle" font-size="10" font-weight="600" fill="#1e293b">System Prompt (~3K)</text>
+      <text x="370" y="80" text-anchor="middle" font-size="9" fill="#475569">同上 (cached)</text>
+      <rect x="290" y="95" width="160" height="25" rx="6" fill="#d1fae5" stroke="#10b981" stroke-width="1.5"/>
+      <text x="370" y="112" text-anchor="middle" font-size="10" fill="#1e293b">用户消息 (~50)</text>
+      <rect x="290" y="125" width="160" height="50" rx="6" fill="#ede9fe" stroke="#8b5cf6" stroke-width="1.5"/>
+      <text x="370" y="142" text-anchor="middle" font-size="10" fill="#1e293b">Step 1: Read 结果</text>
+      <text x="370" y="158" text-anchor="middle" font-size="9" fill="#475569">+assistant text+tool call (~1.5K)</text>
+      <rect x="290" y="180" width="160" height="20" rx="4" fill="#fef3c7" stroke="#f59e0b" stroke-width="1"/>
+      <text x="370" y="194" text-anchor="middle" font-size="9" fill="#1e293b">18 个工具 (~4K)</text>
+      <text x="370" y="225" text-anchor="middle" font-size="11" font-weight="700" fill="#10b981">≈ 8.5K tokens</text>
+
+      <!-- Step 3 -->
+      <rect x="500" y="50" width="160" height="40" rx="6" fill="#dbeafe" stroke="#3b82f6" stroke-width="1.5"/>
+      <text x="580" y="65" text-anchor="middle" font-size="10" font-weight="600" fill="#1e293b">System Prompt (~3K)</text>
+      <text x="580" y="80" text-anchor="middle" font-size="9" fill="#475569">同上 (cached)</text>
+      <rect x="500" y="95" width="160" height="25" rx="6" fill="#d1fae5" stroke="#10b981" stroke-width="1.5"/>
+      <text x="580" y="112" text-anchor="middle" font-size="10" fill="#1e293b">用户消息 (~50)</text>
+      <rect x="500" y="125" width="160" height="50" rx="6" fill="#ede9fe" stroke="#8b5cf6" stroke-width="1.5"/>
+      <text x="580" y="142" text-anchor="middle" font-size="10" fill="#1e293b">Step 1: Read (~1.5K)</text>
+      <text x="580" y="158" text-anchor="middle" font-size="9" fill="#475569">+Step 2: Edit diff (~800)</text>
+      <rect x="500" y="180" width="160" height="20" rx="4" fill="#fef3c7" stroke="#f59e0b" stroke-width="1"/>
+      <text x="580" y="194" text-anchor="middle" font-size="9" fill="#1e293b">18 个工具 (~4K)</text>
+      <text x="580" y="225" text-anchor="middle" font-size="11" font-weight="700" fill="#f59e0b">≈ 9.3K tokens</text>
+
+      <!-- Step 4 -->
+      <rect x="710" y="50" width="160" height="40" rx="6" fill="#dbeafe" stroke="#3b82f6" stroke-width="1.5"/>
+      <text x="790" y="65" text-anchor="middle" font-size="10" font-weight="600" fill="#1e293b">System Prompt (~3K)</text>
+      <text x="790" y="80" text-anchor="middle" font-size="9" fill="#475569">同上 (cached)</text>
+      <rect x="710" y="95" width="160" height="25" rx="6" fill="#d1fae5" stroke="#10b981" stroke-width="1.5"/>
+      <text x="790" y="112" text-anchor="middle" font-size="10" fill="#1e293b">用户消息 (~50)</text>
+      <rect x="710" y="125" width="160" height="75" rx="6" fill="#ede9fe" stroke="#8b5cf6" stroke-width="1.5"/>
+      <text x="790" y="142" text-anchor="middle" font-size="10" fill="#1e293b">Step 1: Read (~1.5K)</text>
+      <text x="790" y="158" text-anchor="middle" font-size="9" fill="#475569">+Step 2: Edit (~800)</text>
+      <text x="790" y="174" text-anchor="middle" font-size="9" fill="#475569">+Step 3: Edit+Bash (~1.2K)</text>
+      <rect x="710" y="205" width="160" height="20" rx="4" fill="#fef3c7" stroke="#f59e0b" stroke-width="1"/>
+      <text x="790" y="219" text-anchor="middle" font-size="9" fill="#1e293b">18 个工具 (~4K)</text>
+      <text x="790" y="250" text-anchor="middle" font-size="11" font-weight="700" fill="#8b5cf6">≈ 10.5K tokens</text>
+
+      <!-- 底部说明 -->
+      <text x="450" y="300" text-anchor="middle" font-size="11" fill="#64748b">每轮循环：System Prompt 不变（可缓存） + 历史消息递增 + 工具定义不变</text>
+      <text x="450" y="320" text-anchor="middle" font-size="11" fill="#64748b">当 token 数达到 (context - maxOutput - reserved) 时，触发 Compaction 压缩</text>
+      <text x="450" y="340" text-anchor="middle" font-size="11" fill="#ef4444" font-weight="600">长时间对话后，旧工具输出会被 Prune 标记为 "[Old tool result content cleared]"</text>
+    </svg>
+  </div>
+</div>
+
+<!-- ===== step>1 消息包装 ===== -->
+<div class="chapter" id="s8">
+  <h2>Step > 1 时的用户消息包装机制</h2>
+  <div class="card">
+    <p>如果在 Step 2 执行期间，用户发送了新消息 "对了，也帮我加上单元测试"，这条消息在 Step 3 的上下文中会被特殊包装：</p>
+    <pre><code>// Step 3 中模型看到的用户新消息（被包装后）
+{
+  role: "user",
+  content: [
+    {
+      type: "text",
+      text: "&lt;system-reminder&gt;\nThe user sent the following message:\n对了，也帮我加上单元测试\n\nPlease address this message and continue with your tasks.\n&lt;/system-reminder&gt;"
+    }
+  ]
+}</code></pre>
+    <div class="note">
+      <strong>为什么包装？</strong>在多轮循环中，如果用户的新消息直接作为普通 user 消息出现，模型可能会将其视为新的独立任务，放弃当前正在执行的工作。包装为 <code>&lt;system-reminder&gt;</code> 后，模型会理解为"这是用户在当前任务进行中的补充说明"，而非新任务。
+    </div>
+  </div>
+</div>
+
+<!-- ===== Processor 内部事件流 ===== -->
+<div class="chapter" id="s9">
+  <h2>Processor 内部事件流 — 工具调用的全生命周期</h2>
+  <div class="card">
+    <p><span class="ic">SessionProcessor.process()</span> 通过 <code>stream.fullStream</code> 接收 LLM 的流式输出，每个事件类型对应不同的处理逻辑：</p>
+    <pre><code>// processor.ts - 流式事件处理顺序（以 Step 2 为例）
+
+// 1. start-step → 记录 git snapshot（用于 diff）
+"start-step"  →  snapshot = await Snapshot.track()
+
+// 2. reasoning → 模型的思考过程（thinking tokens）
+"reasoning-start" → 创建 ReasoningPart
+"reasoning-delta" → 追加思考文本
+"reasoning-end"   → 完成 ReasoningPart
+
+// 3. text → 模型输出的文本（给用户看的）
+"text-start"  → 创建 TextPart
+"text-delta"  → 追加文本 → Session.updatePartDelta() → SSE 推送给前端
+"text-end"    → 完成 TextPart → Plugin.trigger("experimental.text.complete")
+
+// 4. tool-call → 模型决定调用工具
+"tool-input-start" → 创建 ToolPart (status: "pending")
+"tool-call"        → 更新 ToolPart (status: "running") + 检查 Doom Loop
+                     → 执行工具 → 权限请求 → 实际执行 → 结果返回
+"tool-result"      → 更新 ToolPart (status: "completed") + 记录 output
+
+// 5. finish-step → 统计 token/cost
+"finish-step" → 计算 usage → 检查 isOverflow() → 标记 needsCompaction
+              → Snapshot.patch() → 记录文件变更
+
+// 6. finish → 整个流结束
+"finish" → 清理 → 返回结果给 loop()</code></pre>
+  </div>
+
+  <div class="card danger">
+    <h3>Doom Loop 检测</h3>
+    <p>如果最近 3 个工具调用是<strong>同一个工具 + 完全相同的参数</strong>，触发 doom_loop 权限请求：</p>
+    <pre><code>// processor.ts - Doom Loop 检测
+const DOOM_LOOP_THRESHOLD = 3
+const lastThree = parts.slice(-DOOM_LOOP_THRESHOLD)
+
+if (lastThree.length === DOOM_LOOP_THRESHOLD &&
+    lastThree.every(p =>
+        p.type === "tool" &&
+        p.tool === value.toolName &&
+        JSON.stringify(p.state.input) === JSON.stringify(value.input)
+    )) {
+    // 请求 doom_loop 权限 — 让用户确认是否继续
+    await PermissionNext.ask({
+        permission: "doom_loop",
+        patterns: [value.toolName],
+        ...
+    })
+}</code></pre>
+    <p>这防止了模型陷入"读取文件 → 发现问题 → 再读取同一文件"的无限循环。</p>
+  </div>
+</div>
+
+<!-- ===== 完整时序图 ===== -->
+<div class="chapter" id="s10">
+  <h2>完整时序图 — 用户视角 vs 模型视角 vs 系统视角</h2>
+  <div class="card highlight">
+    <table>
+      <tr>
+        <th width="12%">时间</th>
+        <th width="18%">用户视角</th>
+        <th width="35%">模型视角（模型看到什么）</th>
+        <th width="35%">系统视角（内部发生了什么）</th>
+      </tr>
+      <tr>
+        <td>T0</td>
+        <td>输入 "帮我修复 parseConfig..."</td>
+        <td>—</td>
+        <td>createUserMessage() → 持久化 → loop() 启动</td>
+      </tr>
+      <tr>
+        <td>T1</td>
+        <td>等待中...</td>
+        <td>看到 System Prompt + 1 条用户消息 + 18 个工具</td>
+        <td>resolveTools() → insertReminders() → LLM.stream()</td>
+      </tr>
+      <tr>
+        <td>T2</td>
+        <td>看到 "Let me first read..."</td>
+        <td>输出 text + read tool call → finish: tool_use</td>
+        <td>processor: text-delta → tool-call → 执行 ReadTool</td>
+      </tr>
+      <tr>
+        <td>T3</td>
+        <td>—</td>
+        <td>—（工具在执行中）</td>
+        <td>权限检查 → 读文件 → InstructionPrompt.resolve() → 格式化行号 → tool-result</td>
+      </tr>
+      <tr>
+        <td>T4</td>
+        <td>等待中...</td>
+        <td>看到 System Prompt + 3 条消息（含 read 结果）+ 18 个工具</td>
+        <td>loop() 第 2 轮 → resolveTools() → LLM.stream()</td>
+      </tr>
+      <tr>
+        <td>T5</td>
+        <td>看到 "I can see the issue..."</td>
+        <td>输出 text + edit tool call → finish: tool_use</td>
+        <td>processor: text-delta → tool-call → 执行 EditTool</td>
+      </tr>
+      <tr>
+        <td>T6</td>
+        <td>—</td>
+        <td>—（工具在执行中）</td>
+        <td>权限检查 → 9 层 Replacer → SimpleReplacer 命中 → diff 生成 → tool-result</td>
+      </tr>
+      <tr>
+        <td>T7</td>
+        <td>等待中...</td>
+        <td>看到 System Prompt + 5 条消息（含 read + edit 结果）+ 18 个工具</td>
+        <td>loop() 第 3 轮 → resolveTools() → LLM.stream()</td>
+      </tr>
+      <tr>
+        <td>T8</td>
+        <td>看到 lint 正在运行</td>
+        <td>输出 edit + bash tool calls → finish: tool_use</td>
+        <td>processor: 2 个 tool-call → 并行执行 Edit + Bash</td>
+      </tr>
+      <tr>
+        <td>T9</td>
+        <td>等待中...</td>
+        <td>—（工具在执行中）</td>
+        <td>Edit: 替换成功 → Bash: Tree-sitter 解析 → 权限 → spawn → lint 输出</td>
+      </tr>
+      <tr>
+        <td>T10</td>
+        <td>等待中...</td>
+        <td>看到 System Prompt + 7 条消息 + 18 个工具</td>
+        <td>loop() 第 4 轮 → LLM.stream()</td>
+      </tr>
+      <tr>
+        <td>T11</td>
+        <td>看到最终修复总结</td>
+        <td>输出 edit + text → finish: <strong>stop</strong></td>
+        <td>processor: tool-call + text-delta → finish → return "continue"</td>
+      </tr>
+      <tr>
+        <td>T12</td>
+        <td>任务完成 ✓</td>
+        <td>—</td>
+        <td>loop() 检测到 finish="stop" → break → prune() → 返回最终消息</td>
+      </tr>
+    </table>
+  </div>
+</div>
+
+<!-- ===== 关键数据流 ===== -->
+<div class="chapter" id="s11">
+  <h2>关键数据流 — 工具结果的格式转换</h2>
+  <div class="card">
+    <h3>从工具返回 → 持久化 → toModelMessages → LLM 看到的结果</h3>
+    <pre><code>// ① 工具 execute() 返回的原始结果
+{
+    title: "src/utils.ts",
+    output: "&lt;path&gt;...&lt;/path&gt;\n&lt;content&gt;\n1: import...",
+    metadata: { preview: "import { Config }...", truncated: false, loaded: [] },
+    attachments: []  // 可能有图片/PDF
+}
+
+// ② 经 Plugin.trigger("tool.execute.after") 后不变
+// ③ 由 processor.ts "tool-result" 事件持久化到 PartTable
+
+// ④ MessageV2.ToolPart 持久化结构
+{
+    id: "part_02HXK...",
+    messageID: "msg_02HXK...",
+    type: "tool",
+    tool: "read",
+    callID: "toolu_01HXK...",
+    state: {
+        status: "completed",
+        input: { filePath: "/home/user/my-project/src/utils.ts" },
+        output: "&lt;path&gt;...&lt;/path&gt;...",
+        metadata: { preview: "...", truncated: false },
+        title: "src/utils.ts",
+        time: { start: 1718300001000, end: 1718300001500 }
+    }
+}
+
+// ⑤ toModelMessages() 转换为 AI SDK 格式
+{
+    type: "tool-read",           // ← "tool-" + tool 名
+    state: "output-available",  // ← completed → output-available
+    toolCallId: "toolu_01HXK...",
+    input: { filePath: "..." },
+    output: "&lt;path&gt;...&lt;/path&gt;..."  // ← 直接传递 output 字符串
+}
+
+// ⑥ 如果 output 超过 Truncate 限制（2000 行 / 50KB）：
+//    截断 + 保存完整内容到 tool-output 目录
+//    模型看到的是：
+"{前2000行}...\n\n...500 lines truncated...\n\n
+ The tool call succeeded but the output was truncated.
+ Full output saved to: /data/tool-output/tool_01HXK...
+ Use the Task tool to have explore agent process this file..."
+
+// ⑦ 如果被 Prune 标记为 compacted：
+"[Old tool result content cleared]"</code></pre>
+  </div>
+</div>
+
+<!-- ===== 总结 ===== -->
+<div class="chapter" id="s12">
+  <h2>核心规律总结</h2>
+  <div class="grid-2">
+    <div class="card success">
+      <h3>1. 模型永远看不到代码</h3>
+      <p>模型看到的不是"文件"，而是工具返回的<strong>格式化文本</strong>（带行号的 content、diff 输出、bash stdout）。工具的 output 格式直接决定模型的理解质量。</p>
+    </div>
+    <div class="card success">
+      <h3>2. System Prompt 每轮重建</h3>
+      <p>每轮循环都重新调用 <code>environment()</code> + <code>instructions()</code> + <code>provider()</code>，但内容基本不变。Prompt Caching 通过 2 段结构最大化 KV-cache 命中率。</p>
+    </div>
+    <div class="card success">
+      <h3>3. 工具集每轮重解析</h3>
+      <p><code>resolveTools()</code> 每轮都执行完整的管线：注册 → Schema 转换 → Plugin Hook → MCP 合并 → 权限过滤。工具集可能因权限变化而动态增减。</p>
+    </div>
+    <div class="card success">
+      <h3>4. 历史消息只增不减</h3>
+      <p>每轮循环增加 assistant 消息（text + tool calls + results）。消息历史线性增长，直到 Compaction 触发压缩，或 Prune 裁剪旧工具输出。</p>
+    </div>
+    <div class="card success">
+      <h3>5. 模型的决策基于全量上下文</h3>
+      <p>每次 LLM 调用，模型都看到完整的 System Prompt + 全部历史消息 + 全部工具定义。它的"推理"本质上是在这个上下文空间中的模式匹配。</p>
+    </div>
+    <div class="card success">
+      <h3>6. finish_reason 是唯一退出信号</h3>
+      <p>模型通过 <code>finish_reason</code> 告诉系统它的意图：<code>stop</code> = 我完成了，<code>tool_use</code> = 我要调用工具，<code>length</code> = 输出被截断。loop() 据此决定 continue 或 break。</p>
+    </div>
+  </div>
+</div>
+
+</div>
+</body>
+</html>

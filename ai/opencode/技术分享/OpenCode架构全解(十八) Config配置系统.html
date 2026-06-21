@@ -1,0 +1,545 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OpenCode Config 配置系统 - 深度技术分享</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}html{scroll-behavior:smooth}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#f8fafc;color:#1e293b;line-height:1.7}
+.hero{background:linear-gradient(135deg,#0d9488 0%,#14b8a6 50%,#2dd4bf 100%);color:white;padding:80px 0 60px;text-align:center}
+.hero h1{font-size:2.4em;margin-bottom:12px;font-weight:800}.hero p{font-size:1.15em;opacity:.85;max-width:700px;margin:0 auto}
+.hero .tag{display:inline-block;background:rgba(255,255,255,.15);padding:4px 14px;border-radius:20px;font-size:.85em;margin-top:16px}
+.container{max-width:960px;margin:0 auto;padding:0 24px}
+.toc{background:white;border-radius:12px;padding:28px 32px;margin:32px auto;box-shadow:0 1px 3px rgba(0,0,0,.08)}
+.toc h2{font-size:1.2em;margin-bottom:14px;color:#0d9488}.toc ol{padding-left:22px}.toc li{margin:6px 0}.toc a{color:#0d9488;text-decoration:none;font-size:.95em}.toc a:hover{text-decoration:underline}
+.section{margin:36px 0}.section h2{font-size:1.5em;font-weight:700;margin-bottom:16px;padding-bottom:8px;border-bottom:2px solid #e2e8f0}
+.section h3{font-size:1.15em;font-weight:600;margin:18px 0 10px;color:#334155}
+.card{background:white;border-radius:10px;padding:24px;margin:16px 0;box-shadow:0 1px 3px rgba(0,0,0,.06)}
+pre{background:#0f172a;color:#e2e8f0;border-radius:8px;padding:18px;overflow-x:auto;font-size:.88em;line-height:1.6;margin:12px 0}
+code{font-family:'JetBrains Mono','Fira Code',monospace}.inline-code{background:#e2e8f0;color:#1e293b;padding:2px 6px;border-radius:4px;font-size:.9em}
+table{width:100%;border-collapse:collapse;margin:14px 0;font-size:.92em}
+th{background:#0d9488;color:white;padding:10px 14px;text-align:left}td{padding:10px 14px;border-bottom:1px solid #e2e8f0}tr:nth-child(even){background:#f1f5f9}
+.tip{background:linear-gradient(135deg,#f0fdfa,#ccfbf1);border-left:4px solid #14b8a6;padding:16px 20px;border-radius:0 8px 8px 0;margin:14px 0}
+.warn{background:linear-gradient(135deg,#fefce8,#fef9c3);border-left:4px solid #eab308;padding:16px 20px;border-radius:0 8px 8px 0;margin:14px 0}
+.flow{display:flex;align-items:center;justify-content:center;gap:8px;flex-wrap:wrap;margin:20px 0;font-size:.92em}
+.flow .node{background:white;border:2px solid #0d9488;border-radius:8px;padding:8px 16px;font-weight:600}.flow .arrow{color:#0d9488;font-size:1.3em;font-weight:bold}
+.step{display:flex;gap:14px;align-items:flex-start;margin:12px 0}
+.step .num{background:#0d9488;color:white;min-width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:.9em;flex-shrink:0}
+.step .content{flex:1}
+.box{background:white;border:1px solid #e2e8f0;border-radius:8px;padding:16px;margin:10px 0}
+</style>
+</head>
+<body>
+<div class="hero"><div class="container"><h1>OpenCode Config 配置系统</h1><p>7 级优先级合并、JSONC 格式保留、Zod Schema 校验的完整配置引擎</p><div class="tag">Harness 深度技术分享 · 第 18 篇</div></div></div>
+
+<div class="container">
+<div class="toc"><h2>目录</h2><ol>
+<li><a href="#ch1">配置系统全景</a></li>
+<li><a href="#ch2">7 级优先级加载顺序</a></li>
+<li><a href="#ch3">mergeConfigConcatArrays — 智能合并</a></li>
+<li><a href="#ch4">Info Schema 完整字段</a></li>
+<li><a href="#ch5">Permission 权限配置解析</a></li>
+<li><a href="#ch6">Agent / Command / Plugin 从文件加载</a></li>
+<li><a href="#ch7">JSONC 解析与 $schema 自动注入</a></li>
+<li><a href="#ch8">update / updateGlobal — 配置写回</a></li>
+<li><a href="#ch9">企业级 Managed Config</a></li>
+<li><a href="#ch10">依赖安装与版本检查</a></li>
+<li><a href="#ch11">去重与迁移兼容</a></li>
+</ol></div>
+
+<div class="section" id="ch1"><h2>一、配置系统全景</h2>
+<p>OpenCode 的配置系统是 Harness 架构的基石之一。它从<strong>7 个不同的来源</strong>加载配置，按优先级逐层合并，最终产出一个强类型的 <span class="inline-code">Config.Info</span> 对象，供所有模块使用。</p>
+
+<div class="flow">
+<div class="node">Well-known</div><div class="arrow">→</div>
+<div class="node">Global</div><div class="arrow">→</div>
+<div class="node">OPENCODE_CONFIG</div><div class="arrow">→</div>
+<div class="node">Project</div><div class="arrow">→</div>
+<div class="node">.opencode/</div><div class="arrow">→</div>
+<div class="node">INLINE</div><div class="arrow">→</div>
+<div class="node">Managed</div>
+</div>
+
+<div class="card">
+<table>
+<tr><th>设计目标</th><th>实现方式</th></tr>
+<tr><td>类型安全</td><td>Zod Schema (Config.Info) 定义全部字段，运行时校验</td></tr>
+<tr><td>灵活来源</td><td>7 级优先级，从远程组织默认到企业管理员覆盖</td></tr>
+<tr><td>格式兼容</td><td>JSON + JSONC（支持注释和尾逗号）</td></tr>
+<tr><td>数组不覆盖</td><td>plugin / instructions 字段合并而非替换</td></tr>
+<tr><td>企业管控</td><td>systemManagedConfigDir 最高优先级，管理员独占</td></tr>
+</table>
+</div>
+</div>
+
+<div class="section" id="ch2"><h2>二、7 级优先级加载顺序</h2>
+<p>配置按从低到高的优先级加载，高优先级的同名字段覆盖低优先级：</p>
+
+<pre><code>// config.ts — state() 中的加载顺序
+let result: Info = {}
+
+// 1. Remote .well-known/opencode（组织级远程默认）
+for (const [key, value] of Object.entries(auth)) {
+    if (value.type === "wellknown") {
+        const response = await fetch(`${url}/.well-known/opencode`)
+        result = mergeConfigConcatArrays(result, await load(response))
+    }
+}
+
+// 2. Global user config（~/.config/opencode/）
+result = mergeConfigConcatArrays(result, await global())
+
+// 3. Custom config（OPENCODE_CONFIG 环境变量）
+if (Flag.OPENCODE_CONFIG) {
+    result = mergeConfigConcatArrays(result, await loadFile(Flag.OPENCODE_CONFIG))
+}
+
+// 4. Project config（项目目录下的 opencode.json / opencode.jsonc）
+if (!Flag.OPENCODE_DISABLE_PROJECT_CONFIG) {
+    for (const file of await ConfigPaths.projectFiles("opencode", ...)) {
+        result = mergeConfigConcatArrays(result, await loadFile(file))
+    }
+}
+
+// 5. .opencode 目录（.opencode/agents/、.opencode/commands/、.opencode/plugins/、.opencode/opencode.json）
+for (const dir of unique(directories)) {
+    result = mergeConfigConcatArrays(result, await loadFile(path.join(dir, "opencode.json")))
+    result.command = mergeDeep(result.command, await loadCommand(dir))
+    result.agent = mergeDeep(result.agent, await loadAgent(dir))
+    result.plugin.push(...(await loadPlugin(dir)))
+}
+
+// 6. Inline config（OPENCODE_CONFIG_CONTENT 环境变量）
+if (process.env.OPENCODE_CONFIG_CONTENT) {
+    result = mergeConfigConcatArrays(result, await load(OPENCODE_CONFIG_CONTENT))
+}
+
+// 7. Managed config（企业管理员目录 — 最高优先级）
+if (existsSync(managedDir)) {
+    for (const file of ["opencode.jsonc", "opencode.json"]) {
+        result = mergeConfigConcatArrays(result, await loadFile(path.join(managedDir, file)))
+    }
+}</code></pre>
+
+<div class="card">
+<h3>优先级全景表</h3>
+<table>
+<tr><th>优先级</th><th>来源</th><th>路径</th><th>用途</th></tr>
+<tr><td>1（最低）</td><td>Well-known</td><td>https://org/.well-known/opencode</td><td>组织级远程默认配置</td></tr>
+<tr><td>2</td><td>Global</td><td>~/.config/opencode/opencode.json{c}</td><td>用户全局偏好</td></tr>
+<tr><td>3</td><td>OPENCODE_CONFIG</td><td>环境变量指定路径</td><td>自定义配置文件</td></tr>
+<tr><td>4</td><td>Project</td><td>项目根目录/opencode.json{c}</td><td>项目级配置</td></tr>
+<tr><td>5</td><td>.opencode dirs</td><td>.opencode/opencode.json + agents/ + commands/ + plugins/</td><td>项目本地扩展</td></tr>
+<tr><td>6</td><td>INLINE</td><td>OPENCODE_CONFIG_CONTENT 环境变量</td><td>CI/CD 注入配置</td></tr>
+<tr><td>7（最高）</td><td>Managed</td><td>/Library/Application Support/opencode (macOS)</td><td>企业管理员强制覆盖</td></tr>
+</table>
+</div>
+</div>
+
+<div class="section" id="ch3"><h2>三、mergeConfigConcatArrays — 智能合并</h2>
+<p>普通的 <span class="inline-code">mergeDeep</span> 会替换数组字段，但 plugin 和 instructions 应该<strong>合并</strong>：</p>
+
+<pre><code>function mergeConfigConcatArrays(target: Info, source: Info): Info {
+    const merged = mergeDeep(target, source)
+
+    // plugin 数组：合并 + 去重
+    if (target.plugin && source.plugin) {
+        merged.plugin = Array.from(new Set([...target.plugin, ...source.plugin]))
+    }
+
+    // instructions 数组：合并 + 去重
+    if (target.instructions && source.instructions) {
+        merged.instructions = Array.from(new Set([...target.instructions, ...source.instructions]))
+    }
+
+    return merged
+}</code></pre>
+
+<div class="tip">
+<strong>为什么不直接用 mergeDeep？</strong>remeda 的 mergeDeep 对数组字段默认是替换。但用户在全局配置中声明了 <span class="inline-code">["plugin-a"]</span>，在项目配置中声明了 <span class="inline-code">["plugin-b"]</span>，期望结果是两个插件都加载，而非只加载 plugin-b。
+</div>
+</div>
+
+<div class="section" id="ch4"><h2>四、Info Schema 完整字段</h2>
+<p><span class="inline-code">Config.Info</span> 是一个 1409 行文件中的核心 Zod Schema，定义了全部可配置项：</p>
+
+<div class="card">
+<table>
+<tr><th>分类</th><th>字段</th><th>说明</th></tr>
+<tr><td rowspan="4">核心</td><td>model</td><td>主模型（格式 provider/model）</td></tr>
+<tr><td>small_model</td><td>轻量模型（标题生成等任务）</td></tr>
+<tr><td>default_agent</td><td>默认 Agent（必须是 primary）</td></tr>
+<tr><td>username</td><td>自定义用户名</td></tr>
+<tr><td rowspan="3">扩展</td><td>agent</td><td>Agent 配置（7 种内置 + 自定义）</td></tr>
+<tr><td>command</td><td>命令配置（.md 模板）</td></tr>
+<tr><td>plugin</td><td>插件列表（NPM 包名或 file:// URL）</td></tr>
+<tr><td rowspan="3">Provider</td><td>provider</td><td>Provider 配置与模型覆盖</td></tr>
+<tr><td>mcp</td><td>MCP 服务器配置（local/remote）</td></tr>
+<tr><td>disabled/enabled_providers</td><td>Provider 黑白名单</td></tr>
+<tr><td rowspan="4">行为</td><td>permission</td><td>工具权限规则</td></tr>
+<tr><td>compaction</td><td>上下文压缩设置（auto/prune/reserved）</td></tr>
+<tr><td>share</td><td>会话分享策略（manual/auto/disabled）</td></tr>
+<tr><td>instructions</td><td>额外指令文件路径</td></tr>
+<tr><td rowspan="3">环境</td><td>lsp</td><td>LSP 服务器配置（false 禁用全部）</td></tr>
+<tr><td>formatter</td><td>代码格式化器配置</td></tr>
+<tr><td>server</td><td>HTTP 服务器配置（port/hostname/cors）</td></tr>
+<tr><td rowspan="2">高级</td><td>experimental</td><td>实验性功能（batch_tool、telemetry 等）</td></tr>
+<tr><td>enterprise</td><td>企业 URL 配置</td></tr>
+</table>
+</div>
+</div>
+
+<div class="section" id="ch5"><h2>五、Permission 权限配置解析</h2>
+<p>权限配置是最复杂的部分，支持<strong>三种粒度</strong>的写法：</p>
+
+<pre><code>// 粒度 1：全局字符串 — 所有工具统一策略
+"permission": "allow"
+
+// 粒度 2：工具级 — 按工具名设置
+"permission": {
+    "read": "allow",
+    "edit": "ask",
+    "bash": "deny"
+}
+
+// 粒度 3：文件模式级 — 特定文件特殊处理
+"permission": {
+    "read": {
+        "*.env": "ask",
+        "*.ts": "allow"
+    },
+    "edit": {
+        "src/**": "allow",
+        "config/**": "ask"
+    }
+}</code></pre>
+
+<div class="card">
+<h3>Zod 预处理保留键序</h3>
+<pre><code>// 权限规则匹配依赖键的顺序！
+// 用户写的顺序就是匹配顺序
+
+const permissionPreprocess = (val: unknown) => {
+    if (typeof val === "object" && val !== null && !Array.isArray(val)) {
+        return { __originalKeys: Object.keys(val), ...val }
+    }
+    return val
+}
+
+const permissionTransform = (x: unknown) => {
+    const { __originalKeys, ...rest } = x
+    // 按原始键序重建对象
+    const result = {}
+    for (const key of __originalKeys) {
+        if (key in rest) result[key] = rest[key]
+    }
+    return result
+}
+
+// Permission Schema：preprocess → parse → transform
+export const Permission = z.preprocess(
+    permissionPreprocess,
+    z.object({
+        read: PermissionRule.optional(),
+        edit: PermissionRule.optional(),
+        bash: PermissionRule.optional(),
+        // ... 更多工具
+    }).catchall(PermissionRule)  // 支持自定义工具名
+)
+.transform(permissionTransform)</code></pre>
+<p>Zod 默认会按 schema 定义顺序排列键，但权限匹配依赖用户定义的顺序（例如 <span class="inline-code">*.env</span> 应该在 <span class="inline-code">*</span> 前面匹配）。通过 <span class="inline-code">__originalKeys</span> 技巧保留了原始顺序。</p>
+</div>
+</div>
+
+<div class="section" id="ch6"><h2>六、Agent / Command / Plugin 从文件加载</h2>
+<p><span class="inline-code">.opencode/</span> 目录下有三类子资源被自动扫描：</p>
+
+<h3>Agent — Markdown 文件定义</h3>
+<pre><code>async function loadAgent(dir: string) {
+    const result: Record&lt;string, Agent> = {}
+    for (const item of await Glob.scan("{agent,agents}/**/*.md", {
+        cwd: dir, absolute: true,
+    })) {
+        const md = await ConfigMarkdown.parse(item)
+        const agentName = trim(file)
+        const config = {
+            name: agentName,
+            ...md.data,            // frontmatter → Zod 校验
+            prompt: md.content.trim(),  // markdown 正文 → prompt
+        }
+        const parsed = Agent.safeParse(config)
+        if (parsed.success) result[agentName] = parsed.data
+    }
+    return result
+}</code></pre>
+
+<h3>Command — Markdown 模板</h3>
+<pre><code>async function loadCommand(dir: string) {
+    // 扫描 {command,commands}/**/*.md
+    // frontmatter: description, agent, model, subtask
+    // 正文: template 内容
+}</code></pre>
+
+<h3>Plugin — TypeScript / JavaScript 文件</h3>
+<pre><code>async function loadPlugin(dir: string) {
+    const plugins: string[] = []
+    for (const item of await Glob.scan("{plugin,plugins}/*.{ts,js}", {
+        cwd: dir, absolute: true,
+    })) {
+        plugins.push(pathToFileURL(item).href)
+    }
+    return plugins
+}</code></pre>
+
+<div class="tip">
+<strong>约定优于配置：</strong>用户只需在 <span class="inline-code">.opencode/</span> 下创建正确目录结构（agents/、commands/、plugins/），系统自动发现并加载，无需修改 opencode.json。
+</div>
+</div>
+
+<div class="section" id="ch7"><h2>七、JSONC 解析与 $schema 自动注入</h2>
+<p>配置文件支持 JSONC 格式（JSON with Comments），并在首次加载时自动注入 <span class="inline-code">$schema</span>：</p>
+
+<pre><code>function parseConfig(text: string, filepath: string): Info {
+    const errors: JsoncParseError[] = []
+    const data = parseJsonc(text, errors, { allowTrailingComma: true })
+
+    if (errors.length) {
+        // 精确到行号和列号的错误提示
+        const line = beforeOffset.length
+        const column = beforeOffset[beforeOffset.length - 1].length + 1
+        throw new JsonError({
+            path: filepath,
+            message: `\nLine ${line}: ${problemLine}\n${"".padStart(column + 9)}^`,
+        })
+    }
+
+    return Info.safeParse(data)
+}
+
+// 自动注入 $schema 方便 IDE 提示
+if (!parsed.data.$schema && isFile) {
+    parsed.data.$schema = "https://opencode.ai/config.json"
+    const updated = original.replace(
+        /^\s*\{/,
+        '{\n  "$schema": "https://opencode.ai/config.json",'
+    )
+    await Filesystem.write(options.path, updated)
+}</code></pre>
+
+<div class="card">
+<h3>支持的文件格式</h3>
+<table>
+<tr><th>格式</th><th>文件名</th><th>特性</th></tr>
+<tr><td>JSON</td><td>opencode.json</td><td>标准 JSON</td></tr>
+<tr><td>JSONC</td><td>opencode.jsonc</td><td>支持注释 + 尾逗号</td></tr>
+<tr><td>Legacy</td><td>config.json (全局目录)</td><td>向后兼容旧格式</td></tr>
+</table>
+</div>
+</div>
+
+<div class="section" id="ch8"><h2>八、update / updateGlobal — 配置写回</h2>
+<p>系统不仅能读取配置，还能将修改写回文件：</p>
+
+<pre><code>// 项目级更新
+export async function update(config: Info) {
+    const filepath = path.join(Instance.directory, "config.json")
+    const existing = await loadFile(filepath)
+    await Filesystem.writeJson(filepath, mergeDeep(existing, config))
+    await Instance.dispose()  // 重建 Instance state
+}
+
+// 全局配置更新（支持 JSONC 格式保留）
+export async function updateGlobal(config: Info) {
+    const filepath = globalConfigFile()
+    const before = await Filesystem.readText(filepath)
+
+    if (filepath.endsWith(".jsonc")) {
+        // JSONC：使用 jsonc-parser 的 modify API 保留注释和格式
+        const updated = patchJsonc(before, config)
+        await Filesystem.write(filepath, updated)
+    } else {
+        // JSON：直接 mergeDeep + writeJson
+        const existing = parseConfig(before, filepath)
+        await Filesystem.writeJson(filepath, mergeDeep(existing, config))
+    }
+
+    global.reset()  // 清除缓存
+    void Instance.disposeAll()  // 重建所有 Instance
+}</code></pre>
+
+<div class="card">
+<h3>patchJsonc — 格式保留的 JSONC 修改</h3>
+<pre><code>function patchJsonc(input: string, patch: unknown, path: string[] = []): string {
+    if (!isRecord(patch)) {
+        // 叶子节点：使用 jsonc-parser 的 modify 编辑
+        const edits = modify(input, path, patch, {
+            formattingOptions: { insertSpaces: true, tabSize: 2 },
+        })
+        return applyEdits(input, edits)
+    }
+
+    // 递归处理嵌套对象
+    return Object.entries(patch).reduce((result, [key, value]) => {
+        return patchJsonc(result, value, [...path, key])
+    }, input)
+}</code></pre>
+<p>使用 jsonc-parser 库的 modify API，修改 JSONC 文件时保留原有注释、缩进和格式。</p>
+</div>
+</div>
+
+<div class="section" id="ch9"><h2>九、企业级 Managed Config</h2>
+<p>Managed Config 是最高优先级的配置源，由企业 IT 管理员控制，普通用户无法修改：</p>
+
+<pre><code>function systemManagedConfigDir(): string {
+    switch (process.platform) {
+        case "darwin":
+            return "/Library/Application Support/opencode"
+        case "win32":
+            return path.join(process.env.ProgramData || "C:\\ProgramData", "opencode")
+        default:
+            return "/etc/opencode"
+    }
+}
+
+// 最后加载 = 最高优先级
+if (existsSync(managedDir)) {
+    for (const file of ["opencode.jsonc", "opencode.json"]) {
+        result = mergeConfigConcatArrays(result, await loadFile(path.join(managedDir, file)))
+    }
+}</code></pre>
+
+<div class="warn">
+<strong>Managed 与普通目录的区别：</strong>Managed 目录只加载 opencode.json 文件，不会扫描 agents/、commands/、plugins/ 子目录。这是有意为之 — 系统目录需要 elevated 权限，在这些目录下执行 npm install 会失败。因此 Managed 只负责配置文件覆盖，不参与插件安装。
+</div>
+
+<div class="card">
+<h3>企业管控典型场景</h3>
+<table>
+<tr><th>场景</th><th>Managed Config 配置</th></tr>
+<tr><td>强制使用特定模型</td><td><span class="inline-code">{"model": "anthropic/claude-sonnet-4-20250514"}</span></td></tr>
+<tr><td>禁止代码分享</td><td><span class="inline-code">{"share": "disabled"}</span></td></tr>
+<tr><td>禁用特定工具</td><td><span class="inline-code">{"permission": {"bash": "deny"}}</span></td></tr>
+<tr><td>强制安装企业插件</td><td><span class="inline-code">{"plugin": ["enterprise-audit@1.0.0"]}</span></td></tr>
+</table>
+</div>
+</div>
+
+<div class="section" id="ch10"><h2>十、依赖安装与版本检查</h2>
+<p><span class="inline-code">.opencode/</span> 目录可以有自己的 <span class="inline-code">package.json</span>，系统自动安装依赖：</p>
+
+<pre><code>export async function needsInstall(dir: string) {
+    const nodeModules = path.join(dir, "node_modules")
+    if (!existsSync(nodeModules)) return true
+
+    const pkg = path.join(dir, "package.json")
+    const parsed = await Filesystem.readJson(pkg)
+    const depVersion = parsed.dependencies["@opencode-ai/plugin"]
+
+    if (!depVersion) return true
+    if (targetVersion === "latest") {
+        // 检查 npm registry 是否有更新版本
+        return await PackageRegistry.isOutdated("@opencode-ai/plugin", depVersion, dir)
+    }
+    if (depVersion === targetVersion) return false
+    return true
+}
+
+export async function installDependencies(dir: string) {
+    const targetVersion = Installation.isLocal() ? "*" : Installation.VERSION
+
+    // 写入 package.json（确保 @opencode-ai/plugin 依赖存在）
+    json.dependencies = {
+        ...json.dependencies,
+        "@opencode-ai/plugin": targetVersion,
+    }
+    await Filesystem.writeJson(pkg, json)
+
+    // 写入 .gitignore（避免提交自动生成的文件）
+    if (!hasGitIgnore)
+        await Filesystem.write(gitignore,
+            ["node_modules", "package.json", "bun.lock", ".gitignore"].join("\n")
+        )
+
+    // bun install
+    await BunProc.run(["install", ...(proxied() ? ["--no-cache"] : [])], { cwd: dir })
+}</code></pre>
+
+<div class="tip">
+<strong>只读目录自动跳过：</strong>系统通过 <span class="inline-code">fs.access(dir, W_OK)</span> 检查目录是否可写。不可写的配置目录（如某些全局目录）会跳过依赖安装，只加载配置文件本身。
+</div>
+</div>
+
+<div class="section" id="ch11"><h2>十一、去重与迁移兼容</h2>
+
+<h3>插件去重</h3>
+<pre><code>export function deduplicatePlugins(plugins: string[]): string[] {
+    const seenNames = new Set()
+    // 反向遍历 → 高优先级的先被记录
+    for (const specifier of plugins.toReversed()) {
+        const name = getPluginName(specifier)
+        if (!seenNames.has(name)) {
+            seenNames.add(name)
+            uniqueSpecifiers.push(specifier)
+        }
+    }
+    return uniqueSpecifiers.toReversed()
+}</code></pre>
+
+<h3>废弃字段迁移</h3>
+<pre><code>// mode → agent 迁移（mode 字段已废弃）
+for (const [name, mode] of Object.entries(result.mode ?? {})) {
+    result.agent = mergeDeep(result.agent ?? {}, {
+        [name]: { ...mode, mode: "primary" },
+    })
+}
+
+// autoshare → share 迁移
+if (result.autoshare === true && !result.share) {
+    result.share = "auto"
+}
+
+// tools → permission 迁移
+if (result.tools) {
+    for (const [tool, enabled] of Object.entries(result.tools)) {
+        const action = enabled ? "allow" : "deny"
+        perms[tool] = action
+    }
+    result.permission = mergeDeep(perms, result.permission ?? {})
+}
+
+// maxSteps → steps 迁移（Agent Schema 中）
+const steps = agent.steps ?? agent.maxSteps</code></pre>
+
+<div class="card" style="margin-top:24px">
+<h3>配置系统架构总结</h3>
+<pre><code>┌──────────────────────────────────────────────────────────┐
+│                    Config 配置系统                         │
+├──────────────────────────────────────────────────────────┤
+│ 7 级加载（低→高）                                         │
+│  ① well-known → ② global → ③ OPENCODE_CONFIG            │
+│  ④ project → ⑤ .opencode/ → ⑥ INLINE → ⑦ managed       │
+├──────────────────────────────────────────────────────────┤
+│ mergeConfigConcatArrays(target, source)                  │
+│  → mergeDeep + plugin/instructions 合并而非覆盖           │
+├──────────────────────────────────────────────────────────┤
+│ .opencode/ 自动扫描                                       │
+│  → agents/*.md → loadAgent()                            │
+│  → commands/*.md → loadCommand()                        │
+│  → plugins/*.{ts,js} → loadPlugin() → file:// URL       │
+├──────────────────────────────────────────────────────────┤
+│ Info Schema (Zod)                                        │
+│  model / agent / permission / provider / mcp / lsp       │
+│  plugin / command / compaction / experimental / server    │
+├──────────────────────────────────────────────────────────┤
+│ 写回: update() / updateGlobal()                          │
+│  → JSONC: patchJsonc (modify API 保留格式)                │
+│  → JSON: mergeDeep + writeJson                           │
+│  → Instance.dispose() 触发重建                            │
+└──────────────────────────────────────────────────────────┘</code></pre>
+</div>
+</div>
+
+</div>
+</body>
+</html>

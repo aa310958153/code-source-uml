@@ -1,0 +1,561 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OpenCode LSP 语言服务器 - 深度技术分享</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}html{scroll-behavior:smooth}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#f8fafc;color:#1e293b;line-height:1.7}
+.hero{background:linear-gradient(135deg,#dc2626 0%,#ef4444 50%,#f87171 100%);color:white;padding:80px 0 60px;text-align:center}
+.hero h1{font-size:2.4em;margin-bottom:12px;font-weight:800}.hero p{font-size:1.15em;opacity:.85;max-width:700px;margin:0 auto}
+.hero .tag{display:inline-block;background:rgba(255,255,255,.15);padding:4px 14px;border-radius:20px;font-size:.85em;margin-top:16px}
+.container{max-width:960px;margin:0 auto;padding:0 24px}
+.toc{background:white;border-radius:12px;padding:28px 32px;margin:32px auto;box-shadow:0 1px 3px rgba(0,0,0,.08)}
+.toc h2{font-size:1.2em;margin-bottom:14px;color:#dc2626}.toc ol{padding-left:22px}.toc li{margin:6px 0}.toc a{color:#dc2626;text-decoration:none;font-size:.95em}.toc a:hover{text-decoration:underline}
+.section{margin:36px 0}.section h2{font-size:1.5em;font-weight:700;margin-bottom:16px;padding-bottom:8px;border-bottom:2px solid #e2e8f0}
+.section h3{font-size:1.15em;font-weight:600;margin:18px 0 10px;color:#334155}
+.card{background:white;border-radius:10px;padding:24px;margin:16px 0;box-shadow:0 1px 3px rgba(0,0,0,.06)}
+pre{background:#0f172a;color:#e2e8f0;border-radius:8px;padding:18px;overflow-x:auto;font-size:.88em;line-height:1.6;margin:12px 0}
+code{font-family:'JetBrains Mono','Fira Code',monospace}.inline-code{background:#e2e8f0;color:#1e293b;padding:2px 6px;border-radius:4px;font-size:.9em}
+table{width:100%;border-collapse:collapse;margin:14px 0;font-size:.92em}
+th{background:#dc2626;color:white;padding:10px 14px;text-align:left}td{padding:10px 14px;border-bottom:1px solid #e2e8f0}tr:nth-child(even){background:#f1f5f9}
+.tip{background:linear-gradient(135deg,#fef2f2,#fee2e2);border-left:4px solid #ef4444;padding:16px 20px;border-radius:0 8px 8px 0;margin:14px 0}
+.warn{background:linear-gradient(135deg,#fefce8,#fef9c3);border-left:4px solid #eab308;padding:16px 20px;border-radius:0 8px 8px 0;margin:14px 0}
+.flow{display:flex;align-items:center;justify-content:center;gap:8px;flex-wrap:wrap;margin:20px 0;font-size:.92em}
+.flow .node{background:white;border:2px solid #dc2626;border-radius:8px;padding:8px 16px;font-weight:600}.flow .arrow{color:#dc2626;font-size:1.3em;font-weight:bold}
+.step{display:flex;gap:14px;align-items:flex-start;margin:12px 0}
+.step .num{background:#dc2626;color:white;min-width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:.9em;flex-shrink:0}
+.step .content{flex:1}
+.box{background:white;border:1px solid #e2e8f0;border-radius:8px;padding:16px;margin:10px 0}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:14px 0}
+</style>
+</head>
+<body>
+<div class="hero"><div class="container"><h1>OpenCode LSP 语言服务器</h1><p>36 个内置 LSP Server 定义、自动下载安装、按需懒启动与诊断能力</p><div class="tag">Harness 深度技术分享 · 第 19 篇</div></div></div>
+
+<div class="container">
+<div class="toc"><h2>目录</h2><ol>
+<li><a href="#ch1">LSP 系统全景</a></li>
+<li><a href="#ch2">LSPServer.Info 接口定义</a></li>
+<li><a href="#ch3">36 个内置 LSP Server 一览</a></li>
+<li><a href="#ch4">NearestRoot — 项目根目录检测</a></li>
+<li><a href="#ch5">Server 自动下载与安装</a></li>
+<li><a href="#ch6">LSP 状态管理 — state()</a></li>
+<li><a href="#ch7">getClients — 按需懒启动</a></li>
+<li><a href="#ch8">LSP 能力接口</a></li>
+<li><a href="#ch9">配置覆盖 — 自定义 LSP</a></li>
+<li><a href="#ch10">Diagnostics 诊断格式</a></li>
+<li><a href="#ch11">实验性功能：Ty 替代 Pyright</a></li>
+</ol></div>
+
+<div class="section" id="ch1"><h2>一、LSP 系统全景</h2>
+<p>OpenCode 内置了 <strong>36 个 LSP Server 定义</strong>，覆盖主流编程语言。系统通过文件扩展名自动匹配并启动对应的 LSP Server，提供语法诊断、跳转定义、引用查找等 IDE 级能力。</p>
+
+<div class="flow">
+<div class="node">文件操作</div><div class="arrow">→</div>
+<div class="node">扩展名匹配</div><div class="arrow">→</div>
+<div class="node">root 检测</div><div class="arrow">→</div>
+<div class="node">spawn 进程</div><div class="arrow">→</div>
+<div class="node">LSPClient</div>
+</div>
+
+<div class="card">
+<table>
+<tr><th>设计原则</th><th>实现方式</th></tr>
+<tr><td>零配置</td><td>36 个内置 Server 定义，按扩展名自动匹配</td></tr>
+<tr><td>懒启动</td><td>只有首次访问对应文件时才 spawn LSP 进程</td></tr>
+<tr><td>自动安装</td><td>vscode-eslint、pyright 等自动下载到 Global.Path.bin</td></tr>
+<tr><td>项目隔离</td><td>NearestRoot 向上查找锁定文件确定每个项目的 root</td></tr>
+<tr><td>故障隔离</td><td>broken Set 记录失败的 server+root 组合，不重复尝试</td></tr>
+</table>
+</div>
+</div>
+
+<div class="section" id="ch2"><h2>二、LSPServer.Info 接口定义</h2>
+<p>每个 LSP Server 都实现相同的 <span class="inline-code">Info</span> 接口：</p>
+
+<pre><code>export interface Info {
+    id: string                     // 唯一标识符
+    extensions: string[]           // 支持的文件扩展名
+    global?: boolean               // 是否全局可用
+    root: RootFunction             // (file) => Promise&lt;string | undefined>
+    spawn(root: string): Promise&lt;Handle | undefined>
+}
+
+interface Handle {
+    process: ChildProcessWithoutNullStreams  // LSP 子进程
+    initialization?: Record&lt;string, any>     // 初始化参数
+}
+
+type RootFunction = (file: string) => Promise&lt;string | undefined></code></pre>
+
+<div class="card">
+<h3>四个关键属性</h3>
+<table>
+<tr><th>属性</th><th>作用</th><th>示例</th></tr>
+<tr><td>id</td><td>Server 唯一标识，用于配置覆盖和状态追踪</td><td>"typescript", "pyright", "gopls"</td></tr>
+<tr><td>extensions</td><td>决定哪些文件类型触发此 Server</td><td>[".ts", ".tsx", ".js", ".jsx"]</td></tr>
+<tr><td>root</td><td>给定文件 → 返回该 Server 的项目根目录</td><td>NearestRoot(["package-lock.json"])</td></tr>
+<tr><td>spawn</td><td>启动 LSP 子进程，返回进程句柄和初始化参数</td><td>spawn("gopls", { cwd: root })</td></tr>
+</table>
+</div>
+</div>
+
+<div class="section" id="ch3"><h2>三、36 个内置 LSP Server 一览</h2>
+
+<div class="card">
+<h3>Web 前端</h3>
+<table>
+<tr><th>Server</th><th>ID</th><th>扩展名</th><th>Root 标记</th></tr>
+<tr><td>TypeScript</td><td>typescript</td><td>.ts .tsx .js .jsx .mjs .cjs .mts .cts</td><td>lock 文件（排除 deno.json）</td></tr>
+<tr><td>Vue</td><td>vue</td><td>.vue</td><td>lock 文件</td></tr>
+<tr><td>Svelte</td><td>svelte</td><td>.svelte</td><td>lock 文件</td></tr>
+<tr><td>Astro</td><td>astro</td><td>.astro</td><td>lock 文件</td></tr>
+<tr><td>Deno</td><td>deno</td><td>.ts .tsx .js .jsx .mjs</td><td>deno.json / deno.jsonc</td></tr>
+<tr><td>Prisma</td><td>prisma</td><td>.prisma</td><td>schema.prisma</td></tr>
+</table>
+
+<h3>Lint 工具</h3>
+<table>
+<tr><th>Server</th><th>ID</th><th>扩展名</th><th>Root 标记</th></tr>
+<tr><td>ESLint</td><td>eslint</td><td>.ts .tsx .js .jsx .mjs .cjs .mts .cts .vue</td><td>lock 文件</td></tr>
+<tr><td>Oxlint</td><td>oxlint</td><td>.ts .tsx .js .jsx .mjs .cjs .mts .cts .vue .astro .svelte</td><td>.oxlintrc.json / lock 文件 / package.json</td></tr>
+<tr><td>Biome</td><td>biome</td><td>.ts .tsx .js .jsx .json .jsonc .vue .astro .svelte .css .graphql .html</td><td>biome.json / lock 文件</td></tr>
+</table>
+
+<h3>Python</h3>
+<table>
+<tr><th>Server</th><th>ID</th><th>扩展名</th><th>Root 标记</th></tr>
+<tr><td>Pyright</td><td>pyright</td><td>.py .pyi</td><td>pyproject.toml / setup.py / requirements.txt</td></tr>
+<tr><td>Ty（实验性）</td><td>ty</td><td>.py .pyi</td><td>pyproject.toml / ty.toml / setup.py</td></tr>
+</table>
+
+<h3>系统编程语言</h3>
+<table>
+<tr><th>Server</th><th>ID</th><th>语言</th><th>Root 标记</th></tr>
+<tr><td>Gopls</td><td>gopls</td><td>Go</td><td>go.work / go.mod / go.sum</td></tr>
+<tr><td>Rust-Analyzer</td><td>rust</td><td>Rust</td><td>Cargo.toml（向上查 workspace）</td></tr>
+<tr><td>Clangd</td><td>clangd</td><td>C/C++</td><td>compile_commands.json / CMakeLists.txt</td></tr>
+<tr><td>Zls</td><td>zls</td><td>Zig</td><td>build.zig</td></tr>
+</table>
+
+<h3>JVM 生态</h3>
+<table>
+<tr><th>Server</th><th>ID</th><th>语言</th><th>Root 标记</th></tr>
+<tr><td>JDTLS</td><td>jdtls</td><td>Java（需 Java 21+）</td><td>pom.xml / build.gradle</td></tr>
+<tr><td>KotlinLS</td><td>kotlin</td><td>Kotlin</td><td>build.gradle / settings.gradle</td></tr>
+</table>
+
+<h3>.NET 生态</h3>
+<table>
+<tr><th>Server</th><th>ID</th><th>语言</th><th>Root 标记</th></tr>
+<tr><td>CSharp</td><td>csharp</td><td>C#</td><td>.slnx / .sln / .csproj</td></tr>
+<tr><td>FSharp</td><td>fsharp</td><td>F#</td><td>.slnx / .sln / .fsproj</td></tr>
+</table>
+
+<h3>其他语言</h3>
+<table>
+<tr><th>Server</th><th>语言</th><th>Server</th><th>语言</th></tr>
+<tr><td>Rubocop</td><td>Ruby</td><td>ElixirLS</td><td>Elixir</td></tr>
+<tr><td>SourceKit</td><td>Swift/ObjC</td><td>Dart</td><td>Dart/Flutter</td></tr>
+<tr><td>Ocaml</td><td>OCaml</td><td>HLS</td><td>Haskell</td></tr>
+<tr><td>Gleam</td><td>Gleam</td><td>Clojure</td><td>Clojure</td></tr>
+<tr><td>JuliaLS</td><td>Julia</td><td>Nixd</td><td>Nix</td></tr>
+<tr><td>PHPIntelephense</td><td>PHP</td><td>BashLS</td><td>Bash/Shell</td></tr>
+<tr><td>TerraformLS</td><td>Terraform</td><td>TexLab</td><td>LaTeX/BibTeX</td></tr>
+<tr><td>DockerfileLS</td><td>Dockerfile</td><td>YamlPS</td><td>YAML</td></tr>
+<tr><td>LuaLS</td><td>Lua</td><td>Tinymist</td><td>Typst</td></tr>
+</table>
+</div>
+</div>
+
+<div class="section" id="ch4"><h2>四、NearestRoot — 项目根目录检测</h2>
+<p><span class="inline-code">NearestRoot</span> 是一个工厂函数，根据文件向上查找特定标记文件来确定项目根目录：</p>
+
+<pre><code>const NearestRoot = (includePatterns: string[], excludePatterns?: string[]): RootFunction => {
+    return async (file) => {
+        // 排除模式：如果找到排除标记，返回 undefined（不启动此 Server）
+        if (excludePatterns) {
+            const excluded = await Filesystem.up({
+                targets: excludePatterns,
+                start: path.dirname(file),
+                stop: Instance.directory,
+            })
+            if (excluded.value) return undefined
+        }
+
+        // 包含模式：向上查找标记文件
+        const files = Filesystem.up({
+            targets: includePatterns,
+            start: path.dirname(file),
+            stop: Instance.directory,
+        })
+        const first = await files.next()
+        if (!first.value) return Instance.directory  // 没找到就用项目根
+        return path.dirname(first.value)
+    }
+}
+
+// 使用示例
+export const Typescript: Info = {
+    root: NearestRoot(
+        ["package-lock.json", "bun.lockb", "bun.lock", "pnpm-lock.yaml", "yarn.lock"],
+        ["deno.json", "deno.jsonc"],  // 如果有 deno.json 则不使用 TypeScript Server
+    ),
+}</code></pre>
+
+<div class="tip">
+<strong>Den vs TypeScript 的互斥：</strong>TypeScript Server 的 root 函数有排除条件 <span class="inline-code">["deno.json", "deno.jsonc"]</span>。如果项目中存在 deno.json，TypeScript Server 不会启动，由 Deno Server 接管。这种设计避免了两个 LSP Server 同时处理同一组文件。
+</div>
+</div>
+
+<div class="section" id="ch5"><h2>五、Server 自动下载与安装</h2>
+<p>多个 LSP Server 支持自动下载。系统检查本地是否存在，不存在时从 GitHub Releases 或 npm 自动安装：</p>
+
+<pre><code>// ESLint — 从 GitHub 下载 vscode-eslint 源码并编译
+export const ESLint: Info = {
+    async spawn(root) {
+        const serverPath = path.join(Global.Path.bin, "vscode-eslint", "server", "out", "eslintServer.js")
+        if (!(await Filesystem.exists(serverPath))) {
+            if (Flag.OPENCODE_DISABLE_LSP_DOWNLOAD) return
+
+            const response = await fetch(
+                "https://github.com/microsoft/vscode-eslint/archive/refs/heads/main.zip"
+            )
+            await Filesystem.writeStream(zipPath, response.body)
+            await Archive.extractZip(zipPath, Global.Path.bin)
+            await $`npm install`.cwd(finalPath)
+            await $`npm run compile`.cwd(finalPath)
+        }
+    },
+}
+
+// Pyright — 通过 bun install 安装
+export const Pyright: Info = {
+    async spawn(root) {
+        if (!binary) {
+            const js = path.join(Global.Path.bin, "node_modules", "pyright", "dist", "pyright-langserver.js")
+            if (!(await Filesystem.exists(js))) {
+                if (Flag.OPENCODE_DISABLE_LSP_DOWNLOAD) return
+                await Process.spawn([BunProc.which(), "install", "pyright"], {
+                    cwd: Global.Path.bin,
+                }).exited
+            }
+        }
+    },
+}
+
+// Gopls — 通过 go install 安装
+if (!bin) {
+    if (!which("go")) return
+    await Process.spawn(
+        ["go", "install", "golang.org/x/tools/gopls@latest"],
+        { env: { ...process.env, GOBIN: Global.Path.bin } },
+    )
+}</code></pre>
+
+<div class="card">
+<h3>安装方式对比</h3>
+<table>
+<tr><th>安装方式</th><th>Server</th><th>来源</th></tr>
+<tr><td>bun install (npm)</td><td>Pyright, Svelte, Astro, Vue, YamlPS, LuaPS, BashLS</td><td>npm registry</td></tr>
+<tr><td>GitHub Releases</td><td>Clangd, Zls, ElixirLS</td><td>GitHub API + 下载</td></tr>
+<tr><td>npm + compile</td><td>ESLint</td><td>GitHub archive + npm run compile</td></tr>
+<tr><td>go install</td><td>Gopls</td><td>Go module proxy</td></tr>
+<tr><td>gem install</td><td>Rubocop</td><td>RubyGems</td></tr>
+<tr><td>dotnet tool install</td><td>CSharp, FSharp</td><td>NuGet</td></tr>
+<tr><td>PATH 查找（需用户预装）</td><td>Deno, Rust-Analyzer, SourceKit, Gleam</td><td>系统 PATH</td></tr>
+</table>
+</div>
+
+<div class="warn">
+<strong>OPENCODE_DISABLE_LSP_DOWNLOAD：</strong>设置此环境变量可禁止所有自动下载。在离线环境或企业安全策略下非常有用。设置后，如果 Server 二进制文件不存在，spawn 返回 undefined，该 Server 被标记为 broken。
+</div>
+</div>
+
+<div class="section" id="ch6"><h2>六、LSP 状态管理 — state()</h2>
+<p>LSP 系统通过 <span class="inline-code">Instance.state()</span> 管理生命周期：</p>
+
+<pre><code>const state = Instance.state(
+    async () => {
+        const clients: LSPClient.Info[] = []
+        const servers: Record&lt;string, LSPServer.Info> = {}
+        const cfg = await Config.get()
+
+        // LSP 全局禁用
+        if (cfg.lsp === false) {
+            return { broken: new Set(), servers, clients, spawning: new Map() }
+        }
+
+        // 注册所有内置 Server
+        for (const server of Object.values(LSPServer)) {
+            servers[server.id] = server
+        }
+
+        // 实验性过滤（Pyright vs Ty）
+        filterExperimentalServers(servers)
+
+        // 用户配置覆盖
+        for (const [name, item] of Object.entries(cfg.lsp ?? {})) {
+            if (item.disabled) {
+                delete servers[name]  // 禁用某个 Server
+                continue
+            }
+            servers[name] = {
+                ...existing,
+                id: name,
+                extensions: item.extensions ?? existing?.extensions ?? [],
+                spawn: async (root) => ({
+                    process: spawn(item.command[0], item.command.slice(1), {
+                        cwd: root,
+                        env: { ...process.env, ...item.env },
+                    }),
+                    initialization: item.initialization,
+                }),
+            }
+        }
+
+        return { broken: new Set(), servers, clients, spawning: new Map() }
+    },
+    // 销毁回调：关闭所有 LSP Client
+    async (state) => {
+        await Promise.all(state.clients.map((client) => client.shutdown()))
+    },
+)</code></pre>
+</div>
+
+<div class="section" id="ch7"><h2>七、getClients — 按需懒启动</h2>
+<p>LSP Server 不是一开始就全部启动，而是在首次访问对应文件时<strong>按需启动</strong>：</p>
+
+<pre><code>async function getClients(file: string) {
+    const s = await state()
+    const extension = path.parse(file).ext || file
+    const result: LSPClient.Info[] = []
+
+    for (const server of Object.values(s.servers)) {
+        // 1. 扩展名过滤
+        if (server.extensions.length && !server.extensions.includes(extension)) continue
+
+        // 2. 确定项目根目录
+        const root = await server.root(file)
+        if (!root) continue
+
+        // 3. 检查是否已标记为 broken
+        if (s.broken.has(root + server.id)) continue
+
+        // 4. 检查是否已有活跃 Client
+        const match = s.clients.find((x) => x.root === root && x.serverID === server.id)
+        if (match) { result.push(match); continue }
+
+        // 5. 检查是否正在启动中（防重复 spawn）
+        const inflight = s.spawning.get(root + server.id)
+        if (inflight) {
+            const client = await inflight
+            if (client) result.push(client)
+            continue
+        }
+
+        // 6. 首次启动
+        const task = schedule(server, root, root + server.id)
+        s.spawning.set(root + server.id, task)
+        const client = await task
+        if (client) {
+            result.push(client)
+            Bus.publish(Event.Updated, {})  // 通知前端状态变更
+        }
+    }
+    return result
+}</code></pre>
+
+<div class="card">
+<h3>schedule() — 启动流程</h3>
+<pre><code>async function schedule(server, root, key) {
+    const handle = await server.spawn(root)
+    if (!handle) { s.broken.add(key); return undefined }
+
+    const client = await LSPClient.create({
+        serverID: server.id,
+        server: handle,
+        root,
+    })
+    if (!client) { handle.process.kill(); return undefined }
+
+    // 防重复：如果恰好已有同 root+server 的 client，杀掉新的
+    const existing = s.clients.find(x => x.root === root && x.serverID === server.id)
+    if (existing) { handle.process.kill(); return existing }
+
+    s.clients.push(client)
+    return client
+}</code></pre>
+</div>
+</div>
+
+<div class="section" id="ch8"><h2>八、LSP 能力接口</h2>
+<p>LSP 模块对外暴露了一系列标准 LSP 协议方法：</p>
+
+<div class="card">
+<table>
+<tr><th>方法</th><th>LSP 协议</th><th>功能</th></tr>
+<tr><td>diagnostics()</td><td>—</td><td>获取所有 Client 的当前诊断信息</td></tr>
+<tr><td>hover(file, line, char)</td><td>textDocument/hover</td><td>悬停信息（类型、文档）</td></tr>
+<tr><td>definition(file, line, char)</td><td>textDocument/definition</td><td>跳转到定义</td></tr>
+<tr><td>references(file, line, char)</td><td>textDocument/references</td><td>查找所有引用</td></tr>
+<tr><td>implementation(file, line, char)</td><td>textDocument/implementation</td><td>跳转到实现</td></tr>
+<tr><td>documentSymbol(uri)</td><td>textDocument/documentSymbol</td><td>文件内符号列表</td></tr>
+<tr><td>workspaceSymbol(query)</td><td>workspace/symbol</td><td>全工作区符号搜索</td></tr>
+<tr><td>prepareCallHierarchy(file, line, char)</td><td>textDocument/prepareCallHierarchy</td><td>调用层次准备</td></tr>
+<tr><td>incomingCalls(file, line, char)</td><td>callHierarchy/incomingCalls</td><td>被谁调用</td></tr>
+<tr><td>outgoingCalls(file, line, char)</td><td>callHierarchy/outgoingCalls</td><td>调用了谁</td></tr>
+<tr><td>touchFile(file)</td><td>didOpen/didChange</td><td>通知 LSP 文件已打开/变更</td></tr>
+</table>
+</div>
+
+<pre><code>// run vs runAll — 两种调用模式
+
+// run：获取指定文件对应的 Client 执行
+async function run&lt;T>(file: string, fn: (client: LSPClient.Info) => Promise&lt;T>) {
+    const clients = await getClients(file)
+    return Promise.all(clients.map(fn))
+}
+
+// runAll：在所有已启动的 Client 上执行
+async function runAll&lt;T>(fn: (client: LSPClient.Info) => Promise&lt;T>) {
+    const clients = await state().then((x) => x.clients)
+    return Promise.all(clients.map(fn))
+}
+
+// 使用示例
+export async function definition(input) {
+    return run(input.file, (client) =>
+        client.connection.sendRequest("textDocument/definition", {
+            textDocument: { uri: pathToFileURL(input.file).href },
+            position: { line: input.line, character: input.character },
+        }).catch(() => null),
+    ).then((result) => result.flat().filter(Boolean))
+}</code></pre>
+</div>
+
+<div class="section" id="ch9"><h2>九、配置覆盖 — 自定义 LSP</h2>
+<p>用户可以在 opencode.json 中覆盖或新增 LSP Server：</p>
+
+<pre><code>// opencode.json
+{
+    "lsp": {
+        // 禁用内置 Server
+        "eslint": { "disabled": true },
+
+        // 覆盖内置 Server 参数
+        "pyright": {
+            "command": ["pyright-langserver", "--stdio", "--verbose"],
+            "env": { "PYTHONPATH": "/custom/path" }
+        },
+
+        // 新增自定义 Server
+        "my-custom-ls": {
+            "command": ["my-ls-binary", "--stdio"],
+            "extensions": [".custom"],
+            "initialization": { "customSetting": true }
+        }
+    }
+}</code></pre>
+
+<div class="warn">
+<strong>自定义 Server 必须声明 extensions：</strong>Zod Schema 的 refine 校验要求非内置 Server 必须提供 extensions 数组，否则配置校验失败。
+</div>
+
+<div class="tip">
+<strong>完全禁用 LSP：</strong>设置 <span class="inline-code">"lsp": false</span> 可关闭所有 LSP 功能，适用于对性能敏感或不需要诊断的场景。
+</div>
+</div>
+
+<div class="section" id="ch10"><h2>十、Diagnostics 诊断格式</h2>
+<p>诊断信息被格式化为易读的字符串：</p>
+
+<pre><code>export namespace Diagnostic {
+    export function pretty(diagnostic: LSPClient.Diagnostic) {
+        const severityMap = {
+            1: "ERROR",
+            2: "WARN",
+            3: "INFO",
+            4: "HINT",
+        }
+        const severity = severityMap[diagnostic.severity || 1]
+        const line = diagnostic.range.start.line + 1    // LSP 是 0-based
+        const col = diagnostic.range.start.character + 1
+
+        return `${severity} [${line}:${col}] ${diagnostic.message}`
+        // 输出示例: "ERROR [42:10] Type 'string' is not assignable to type 'number'"
+    }
+}</code></pre>
+
+<div class="card">
+<h3>诊断聚合</h3>
+<pre><code>export async function diagnostics() {
+    const results: Record&lt;string, LSPClient.Diagnostic[]> = {}
+    for (const result of await runAll(async (client) => client.diagnostics)) {
+        for (const [path, diagnostics] of result.entries()) {
+            const arr = results[path] || []
+            arr.push(...diagnostics)
+            results[path] = arr
+        }
+    }
+    return results
+}
+// 结果: { "src/app.ts": [diagnostic1, diagnostic2], "src/util.ts": [...] }</code></pre>
+<p>多个 LSP Client（如 TypeScript + ESLint）对同一文件的诊断结果被合并在一起。</p>
+</div>
+</div>
+
+<div class="section" id="ch11"><h2>十一、实验性功能：Ty 替代 Pyright</h2>
+<p>通过环境变量 <span class="inline-code">OPENCODE_EXPERIMENTAL_LSP_TY</span> 可以切换到 Ruff 团队开发的 Ty 类型检查器：</p>
+
+<pre><code>const filterExperimentalServers = (servers: Record&lt;string, LSPServer.Info>) => {
+    if (Flag.OPENCODE_EXPERIMENTAL_LSP_TY) {
+        // Ty 启用 → 禁用 Pyright
+        if (servers["pyright"]) {
+            delete servers["pyright"]
+        }
+    } else {
+        // 默认 → 禁用 Ty
+        if (servers["ty"]) {
+            delete servers["ty"]
+        }
+    }
+}</code></pre>
+
+<div class="card" style="margin-top:24px">
+<h3>LSP 系统架构总结</h3>
+<pre><code>┌────────────────────────────────────────────────────────┐
+│                    LSP 系统                             │
+├────────────────────────────────────────────────────────┤
+│ server.ts — 36 个 LSPServer.Info 定义                   │
+│  Deno, TypeScript, Vue, ESLint, Pyright, Gopls ...     │
+│  每个定义: id + extensions + root() + spawn()           │
+├────────────────────────────────────────────────────────┤
+│ index.ts — 运行时管理                                    │
+│  state(): servers{} + clients[] + broken Set + spawning │
+│  getClients(file): 按需懒启动 + 去重 + broken 跳过       │
+│  run()/runAll(): 分发 LSP 请求到对应 Client             │
+├────────────────────────────────────────────────────────┤
+│ NearestRoot: 文件→向上查找标记文件→确定项目 root          │
+│  include: package.json, go.mod, pyproject.toml ...     │
+│  exclude: deno.json (TypeScript Server 互斥)            │
+├────────────────────────────────────────────────────────┤
+│ 自动安装策略                                             │
+│  bun install: Pyright, Svelte, Astro, Vue              │
+│  GitHub Releases: Clangd, Zls, ElixirLS                │
+│  go install: Gopls | gem install: Rubocop              │
+│  dotnet tool: CSharp, FSharp                           │
+│  PATH: Deno, Rust-Analyzer, SourceKit                  │
+├────────────────────────────────────────────────────────┤
+│ 配置: cfg.lsp                                           │
+│  false: 禁用全部 | { name: { disabled: true } }        │
+│  { name: { command, extensions, env, initialization } } │
+└────────────────────────────────────────────────────────┘</code></pre>
+</div>
+</div>
+
+</div>
+</body>
+</html>

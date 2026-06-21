@@ -1,0 +1,701 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OpenCode 多Agent系统 - 深度技术分享</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#f8fafc;color:#1e293b;line-height:1.7}
+.hero{background:linear-gradient(135deg,#1e1b4b 0%,#312e81 50%,#4338ca 100%);color:white;padding:80px 0 60px;text-align:center}
+.hero h1{font-size:2.4em;margin-bottom:12px;font-weight:800}
+.hero p{font-size:1.15em;opacity:.85;max-width:700px;margin:0 auto}
+.hero .tag{display:inline-block;background:rgba(255,255,255,.15);padding:4px 14px;border-radius:20px;font-size:.85em;margin-top:16px}
+.container{max-width:960px;margin:0 auto;padding:0 24px}
+.toc{background:white;border-radius:12px;padding:28px 32px;margin:32px auto;box-shadow:0 1px 3px rgba(0,0,0,.08)}
+.toc h2{font-size:1.2em;margin-bottom:14px;color:#4338ca}
+.toc ol{padding-left:22px}
+.toc li{margin:6px 0}
+.toc a{color:#4338ca;text-decoration:none;font-size:.95em}
+.toc a:hover{text-decoration:underline}
+.section{margin:36px 0}
+.section h2{font-size:1.5em;font-weight:700;color:#1e293b;margin-bottom:16px;padding-bottom:8px;border-bottom:2px solid #e2e8f0}
+.section h3{font-size:1.15em;font-weight:600;margin:18px 0 10px;color:#334155}
+.card{background:white;border-radius:10px;padding:24px;margin:16px 0;box-shadow:0 1px 3px rgba(0,0,0,.06)}
+pre{background:#0f172a;color:#e2e8f0;border-radius:8px;padding:18px;overflow-x:auto;font-size:.88em;line-height:1.6;margin:12px 0}
+code{font-family:'JetBrains Mono','Fira Code',monospace}
+.inline-code{background:#e2e8f0;color:#1e293b;padding:2px 6px;border-radius:4px;font-size:.9em}
+table{width:100%;border-collapse:collapse;margin:14px 0;font-size:.92em}
+th{background:#4338ca;color:white;padding:10px 14px;text-align:left}
+td{padding:10px 14px;border-bottom:1px solid #e2e8f0}
+tr:nth-child(even){background:#f1f5f9}
+.tip{background:linear-gradient(135deg,#eff6ff,#dbeafe);border-left:4px solid #3b82f6;padding:16px 20px;border-radius:0 8px 8px 0;margin:14px 0}
+.warn{background:linear-gradient(135deg,#fefce8,#fef9c3);border-left:4px solid #eab308;padding:16px 20px;border-radius:0 8px 8px 0;margin:14px 0}
+.danger{background:linear-gradient(135deg,#fef2f2,#fee2e2);border-left:4px solid #ef4444;padding:16px 20px;border-radius:0 8px 8px 0;margin:14px 0}
+.adv-card{background:white;border:1px solid #e2e8f0;border-radius:10px;padding:20px;margin:14px 0}
+.adv-card h4{color:#4338ca;margin-bottom:8px}
+.step{display:flex;gap:14px;align-items:flex-start;margin:12px 0}
+.step .num{background:#4338ca;color:white;min-width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:.9em;flex-shrink:0}
+.step .content{flex:1}
+.box{background:#f1f5f9;border-radius:8px;padding:14px 18px;margin:10px 0;border:1px solid #e2e8f0}
+.badge{display:inline-block;padding:2px 10px;border-radius:12px;font-size:.78em;font-weight:600}
+.badge-primary{background:#4338ca;color:white}
+.badge-sub{background:#059669;color:white}
+.badge-hidden{background:#6b7280;color:white}
+.flow{display:flex;align-items:center;justify-content:center;gap:8px;flex-wrap:wrap;margin:20px 0;font-size:.92em}
+.flow .node{background:white;border:2px solid #4338ca;border-radius:8px;padding:8px 16px;font-weight:600}
+.flow .arrow{color:#4338ca;font-size:1.3em;font-weight:bold}
+svg{max-width:100%;margin:16px auto;display:block}
+</style>
+</head>
+<body>
+
+<div class="hero">
+<div class="container">
+<h1>OpenCode 多Agent系统</h1>
+<p>深入解析 build/plan/general/explore 等 7 种 Agent 的定义、权限隔离、TaskTool 编排与 Agent 切换机制</p>
+<div class="tag">Harness 深度技术分享 · 第 11 篇</div>
+</div>
+</div>
+
+<div class="container">
+
+<div class="toc">
+<h2>目录</h2>
+<ol>
+<li><a href="#ch1">为什么需要多 Agent？</a></li>
+<li><a href="#ch2">Agent 系统全景架构</a></li>
+<li><a href="#ch3">Agent.Info — Zod Schema 数据模型</a></li>
+<li><a href="#ch4">七种内置 Agent 详解</a></li>
+<li><a href="#ch5">权限隔离三层架构</a></li>
+<li><a href="#ch6">Agent Mode — 角色分类机制</a></li>
+<li><a href="#ch7">TaskTool — 子 Agent 编排引擎</a></li>
+<li><a href="#ch8">子 Session 隔离与权限继承</a></li>
+<li><a href="#ch9">Plan 模式 — 只读分析 Agent</a></li>
+<li><a href="#ch10">Plan→Build 切换机制</a></li>
+<li><a href="#ch11">自定义 Agent — 配置驱动的扩展</a></li>
+<li><a href="#ch12">Agent.generate — AI 辅助创建 Agent</a></li>
+<li><a href="#ch13">Doom Loop 检测与防护</a></li>
+<li><a href="#ch14">完整生命周期总结</a></li>
+</ol>
+</div>
+
+<!-- 第1章 -->
+<div class="section" id="ch1">
+<h2>一、为什么需要多 Agent？</h2>
+
+<p>在单体 Agent 架构中，一个 AI 需要同时承担「分析代码」「执行修改」「搜索文件」「规划方案」等所有职责。这带来三个核心问题：</p>
+
+<div class="card">
+<h3>问题一：权限过宽</h3>
+<p>分析型任务（搜索代码、理解架构）本不需要写权限，但单体 Agent 同时拥有读写权限，增加了误操作风险。</p>
+</div>
+
+<div class="card">
+<h3>问题二：上下文污染</h3>
+<p>当 AI 同时进行规划和实现时，规划阶段的讨论会占用实现阶段的上下文窗口，导致长任务中上下文溢出。</p>
+</div>
+
+<div class="card">
+<h3>问题三：缺乏专业化</h3>
+<p>不同任务需要不同的 system prompt 和工具集。代码搜索 Agent 需要 grep/glob，而构建 Agent 需要 edit/bash。</p>
+</div>
+
+<p>OpenCode 的解决方案是 <strong>多 Agent 系统</strong>：将职责拆分为独立 Agent，每个 Agent 拥有独立的权限集、工具集和 system prompt，通过 TaskTool 进行编排。</p>
+</div>
+
+<!-- 第2章 -->
+<div class="section" id="ch2">
+<h2>二、Agent 系统全景架构</h2>
+
+<svg viewBox="0 0 800 420" xmlns="http://www.w3.org/2000/svg">
+<defs>
+<linearGradient id="g1" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#4338ca"/><stop offset="100%" stop-color="#6366f1"/></linearGradient>
+</defs>
+<rect x="300" y="10" width="200" height="46" rx="8" fill="url(#g1)"/>
+<text x="400" y="38" text-anchor="middle" fill="white" font-size="16" font-weight="bold">Agent Registry</text>
+<text x="400" y="80" text-anchor="middle" fill="#64748b" font-size="12">agent.ts · state() · Instance.state</text>
+
+<line x1="400" y1="56" x2="400" y2="72" stroke="#94a3b8" stroke-width="1.5"/>
+
+<!-- Primary Agents -->
+<rect x="60" y="100" width="140" height="40" rx="6" fill="#4338ca"/>
+<text x="130" y="125" text-anchor="middle" fill="white" font-size="13" font-weight="bold">build</text>
+<text x="130" y="156" text-anchor="middle" fill="#64748b" font-size="11">primary · 全权限</text>
+
+<rect x="230" y="100" width="140" height="40" rx="6" fill="#7c3aed"/>
+<text x="300" y="125" text-anchor="middle" fill="white" font-size="13" font-weight="bold">plan</text>
+<text x="300" y="156" text-anchor="middle" fill="#64748b" font-size="11">primary · 只读分析</text>
+
+<!-- Sub Agents -->
+<rect x="430" y="100" width="140" height="40" rx="6" fill="#059669"/>
+<text x="500" y="125" text-anchor="middle" fill="white" font-size="13" font-weight="bold">general</text>
+<text x="500" y="156" text-anchor="middle" fill="#64748b" font-size="11">subagent · 通用研究</text>
+
+<rect x="600" y="100" width="140" height="40" rx="6" fill="#0891b2"/>
+<text x="670" y="125" text-anchor="middle" fill="white" font-size="13" font-weight="bold">explore</text>
+<text x="670" y="156" text-anchor="middle" fill="#64748b" font-size="11">subagent · 代码搜索</text>
+
+<!-- Hidden Agents -->
+<rect x="60" y="190" width="140" height="40" rx="6" fill="#6b7280"/>
+<text x="130" y="215" text-anchor="middle" fill="white" font-size="13" font-weight="bold">compaction</text>
+<text x="130" y="246" text-anchor="middle" fill="#64748b" font-size="11">hidden · 上下文压缩</text>
+
+<rect x="230" y="190" width="140" height="40" rx="6" fill="#6b7280"/>
+<text x="300" y="215" text-anchor="middle" fill="white" font-size="13" font-weight="bold">title</text>
+<text x="300" y="246" text-anchor="middle" fill="#64748b" font-size="11">hidden · 标题生成</text>
+
+<rect x="430" y="190" width="140" height="40" rx="6" fill="#6b7280"/>
+<text x="500" y="215" text-anchor="middle" fill="white" font-size="13" font-weight="bold">summary</text>
+<text x="500" y="246" text-anchor="middle" fill="#64748b" font-size="11">hidden · 会话摘要</text>
+
+<!-- Custom -->
+<rect x="600" y="190" width="140" height="40" rx="6" fill="#f59e0b" stroke="#d97706" stroke-width="1"/>
+<text x="670" y="215" text-anchor="middle" fill="white" font-size="13" font-weight="bold">自定义 Agent</text>
+<text x="670" y="246" text-anchor="middle" fill="#64748b" font-size="11">opencode.json</text>
+
+<!-- TaskTool -->
+<rect x="250" y="290" width="300" height="44" rx="8" fill="#dc2626"/>
+<text x="400" y="317" text-anchor="middle" fill="white" font-size="14" font-weight="bold">TaskTool — 子 Agent 编排</text>
+
+<!-- Arrows -->
+<line x1="130" y1="140" x2="130" y2="190" stroke="#94a3b8" stroke-width="1" stroke-dasharray="4"/>
+<line x1="500" y1="140" x2="400" y2="290" stroke="#dc2626" stroke-width="1.5"/>
+<line x1="670" y1="140" x2="400" y2="290" stroke="#dc2626" stroke-width="1.5"/>
+
+<text x="400" y="365" text-anchor="middle" fill="#64748b" font-size="11">TaskTool 创建子 Session → 隔离权限 → 独立 ReAct 循环</text>
+
+<!-- Permission -->
+<rect x="150" y="385" width="500" height="30" rx="6" fill="#f1f5f9" stroke="#cbd5e1"/>
+<text x="400" y="405" text-anchor="middle" fill="#475569" font-size="12">PermissionNext.merge(defaults, agentRules, userOverrides)</text>
+</svg>
+</div>
+
+<!-- 第3章 -->
+<div class="section" id="ch3">
+<h2>三、Agent.Info — Zod Schema 数据模型</h2>
+
+<p>每个 Agent 的配置由 <span class="inline-code">Agent.Info</span> Zod Schema 定义，这是整个 Agent 系统的数据基础：</p>
+
+<pre><code>// packages/opencode/src/agent/agent.ts
+export namespace Agent {
+    export const Info = z.object({
+        name: z.string(),                          // Agent 唯一标识
+        description: z.string().optional(),         // 描述（模型看到的）
+        mode: z.enum(["subagent", "primary", "all"]),  // 角色分类
+        native: z.boolean().optional(),             // 是否内置
+        hidden: z.boolean().optional(),             // 是否对用户隐藏
+        topP: z.number().optional(),                // 模型采样参数
+        temperature: z.number().optional(),
+        color: z.string().optional(),               // UI 颜色标识
+        permission: PermissionNext.Ruleset,         // 权限规则集（核心）
+        model: z.object({                           // 指定模型（可选）
+            modelID: z.string(),
+            providerID: z.string(),
+        }).optional(),
+        variant: z.string().optional(),             // Prompt 变体
+        prompt: z.string().optional(),              // 自定义 system prompt
+        options: z.record(z.string(), z.any()),     // 模型特定选项
+        steps: z.number().int().positive().optional(),  // 最大步数限制
+    })
+}</code></pre>
+
+<div class="tip">
+<strong>关键字段：</strong><span class="inline-code">permission</span> 是每个 Agent 的核心差异 — build 拥有全权限，plan 禁止所有编辑操作，explore 只保留搜索类工具。权限决定了 Agent 的"能力边界"。
+</div>
+</div>
+
+<!-- 第4章 -->
+<div class="section" id="ch4">
+<h2>四、七种内置 Agent 详解</h2>
+
+<table>
+<tr><th>Agent</th><th>Mode</th><th>Hidden</th><th>核心权限特征</th><th>用途</th></tr>
+<tr><td><span class="badge badge-primary">build</span></td><td>primary</td><td>否</td><td>全权限 + question + plan_enter</td><td>默认 Agent，执行工具调用</td></tr>
+<tr><td><span class="badge badge-primary">plan</span></td><td>primary</td><td>否</td><td>禁止所有 edit，仅允许写 .opencode/plans/*.md</td><td>只读分析和规划</td></tr>
+<tr><td><span class="badge badge-sub">general</span></td><td>subagent</td><td>否</td><td>全权限但 deny todoread/todowrite</td><td>通用研究和多步任务</td></tr>
+<tr><td><span class="badge badge-sub">explore</span></td><td>subagent</td><td>否</td><td>deny *，仅 allow grep/glob/list/bash/read/web</td><td>快速代码库搜索</td></tr>
+<tr><td><span class="badge badge-hidden">compaction</span></td><td>primary</td><td>是</td><td>deny *（无任何工具权限）</td><td>上下文压缩</td></tr>
+<tr><td><span class="badge badge-hidden">title</span></td><td>primary</td><td>是</td><td>deny *（无任何工具权限）</td><td>生成会话标题</td></tr>
+<tr><td><span class="badge badge-hidden">summary</span></td><td>primary</td><td>是</td><td>deny *（无任何工具权限）</td><td>生成会话摘要</td></tr>
+</table>
+
+<div class="card">
+<h3>build Agent — 全能构建者</h3>
+<pre><code>build: {
+    name: "build",
+    description: "The default agent. Executes tools based on configured permissions.",
+    permission: PermissionNext.merge(
+        defaults,
+        PermissionNext.fromConfig({
+            question: "allow",      // 可以向用户提问
+            plan_enter: "allow",    // 可以切换到 plan 模式
+        }),
+        user,                       // 用户自定义权限覆盖
+    ),
+    mode: "primary",
+    native: true,
+}</code></pre>
+</div>
+
+<div class="card">
+<h3>explore Agent — 快速搜索专家</h3>
+<pre><code>explore: {
+    name: "explore",
+    permission: PermissionNext.merge(
+        defaults,
+        PermissionNext.fromConfig({
+            "*": "deny",              // 先禁止所有
+            grep: "allow",           // 只开搜索
+            glob: "allow",
+            list: "allow",
+            bash: "allow",
+            webfetch: "allow",
+            websearch: "allow",
+            codesearch: "allow",
+            read: "allow",
+        }),
+        user,
+    ),
+    description: "Fast agent specialized for exploring codebases...",
+    prompt: PROMPT_EXPLORE,          // 专用搜索提示词
+    mode: "subagent",
+    native: true,
+}</code></pre>
+<p>explore Agent 的设计体现了一个重要原则：<strong>最小权限</strong>。它只能搜索和阅读，不能编辑任何文件。这使得它可以安全地被频繁调用，不会造成代码破坏。</p>
+</div>
+</div>
+
+<!-- 第5章 -->
+<div class="section" id="ch5">
+<h2>五、权限隔离三层架构</h2>
+
+<p>每个 Agent 的最终权限由三层合并决定：</p>
+
+<div class="flow">
+<div class="node">defaults (基础层)</div>
+<div class="arrow">→</div>
+<div class="node">agentRules (Agent 层)</div>
+<div class="arrow">→</div>
+<div class="node">user (用户层)</div>
+</div>
+
+<pre><code>// 第一层：defaults — 所有 Agent 共享的基础权限
+const defaults = PermissionNext.fromConfig({
+    "*": "allow",                      // 默认允许所有工具
+    doom_loop: "ask",                  // 死循环检测需确认
+    external_directory: {"*": "ask"},  // 外部目录需确认
+    question: "deny",                  // 默认禁止提问
+    plan_enter: "deny",                // 默认禁止进入 plan
+    plan_exit: "deny",                 // 默认禁止退出 plan
+    read: {
+        "*": "allow",
+        "*.env": "ask",               // .env 文件需确认
+        "*.env.*": "ask",
+        "*.env.example": "allow",
+    },
+})
+
+// 第二层：agentRules — 每个 Agent 的特殊规则
+// 例如 build Agent 开放 question 和 plan_enter
+PermissionNext.fromConfig({ question: "allow", plan_enter: "allow" })
+
+// 第三层：user — 用户在 opencode.json 中的配置
+const user = PermissionNext.fromConfig(cfg.permission ?? {})
+
+// 最终合并（后者覆盖前者）
+PermissionNext.merge(defaults, agentRules, user)</code></pre>
+
+<div class="warn">
+<strong>合并优先级：</strong>user > agentRules > defaults。这意味着用户可以通过 opencode.json 覆盖任何 Agent 的权限设置。但要注意，<span class="inline-code">PermissionNext.merge</span> 的行为是"后面的规则覆盖前面的同权限同模式规则"。
+</div>
+</div>
+
+<!-- 第6章 -->
+<div class="section" id="ch6">
+<h2>六、Agent Mode — 角色分类机制</h2>
+
+<p>Agent 的 <span class="inline-code">mode</span> 字段决定了它在系统中的角色定位：</p>
+
+<table>
+<tr><th>Mode</th><th>含义</th><th>对用户可见</th><th>可被 TaskTool 调用</th><th>可设为主 Agent</th></tr>
+<tr><td><span class="inline-code">primary</span></td><td>主 Agent，直接响应用户</td><td>是</td><td>否</td><td>是</td></tr>
+<tr><td><span class="inline-code">subagent</span></td><td>子 Agent，由 TaskTool 编排</td><td>是</td><td>是</td><td>否</td></tr>
+<tr><td><span class="inline-code">all</span></td><td>两者皆可</td><td>是</td><td>是</td><td>是</td></tr>
+</table>
+
+<pre><code>// TaskTool 中过滤可用 Agent 的逻辑
+const agents = await Agent.list()
+    .then(x => x.filter(a => a.mode !== "primary"))
+// 只有 mode !== "primary" 的 Agent 才能作为子 Agent 被调用
+
+// defaultAgent 中的过滤
+const primaryVisible = Object.values(agents)
+    .find(a => a.mode !== "subagent" && a.hidden !== true)
+// 只有 mode !== "subagent" 且非隐藏的 Agent 才能作为默认 Agent</code></pre>
+
+<div class="tip">
+<strong>hidden 字段的作用：</strong>compaction、title、summary 三个 Agent 虽然 mode 是 "primary"，但 hidden=true 使它们对用户不可见。它们是系统内部的"幕后工作者"，在需要时被自动调用。
+</div>
+</div>
+
+<!-- 第7章 -->
+<div class="section" id="ch7">
+<h2>七、TaskTool — 子 Agent 编排引擎</h2>
+
+<p>TaskTool 是多 Agent 系统的编排核心，它负责创建子 Session、启动子 Agent 的 ReAct 循环，并将结果返回给主 Agent。</p>
+
+<h3>7.1 工具定义</h3>
+<pre><code>// packages/opencode/src/tool/task.ts
+export const TaskTool = Tool.define("task", async (ctx) => {
+    // 动态生成可用 Agent 列表
+    const agents = await Agent.list()
+        .then(x => x.filter(a => a.mode !== "primary"))
+
+    // 按权限过滤（调用者可能无权访问某些 Agent）
+    const caller = ctx?.agent
+    const accessible = caller
+        ? agents.filter(a => PermissionNext.evaluate("task", a.name, caller.permission).action !== "deny")
+        : agents
+
+    // 将 Agent 列表注入工具描述
+    const description = DESCRIPTION.replace(
+        "{agents}",
+        accessible.map(a => `- ${a.name}: ${a.description}`).join("\n"),
+    )
+    return { description, parameters, async execute(params, ctx) { ... } }
+})</code></pre>
+
+<h3>7.2 执行流程</h3>
+<div class="step"><div class="num">1</div><div class="content"><strong>权限检查</strong> — 通过 <span class="inline-code">ctx.ask()</span> 请求 task 权限</div></div>
+<div class="step"><div class="num">2</div><div class="content"><strong>创建子 Session</strong> — <span class="inline-code">Session.create({ parentID: ctx.sessionID })</span></div></div>
+<div class="step"><div class="num">3</div><div class="content"><strong>设置权限</strong> — 子 Session deny todoread/todowrite，防止子 Agent 修改主任务列表</div></div>
+<div class="step"><div class="num">4</div><div class="content"><strong>启动 ReAct 循环</strong> — <span class="inline-code">SessionPrompt.prompt({ sessionID: session.id })</span></div></div>
+<div class="step"><div class="num">5</div><div class="content"><strong>返回结果</strong> — 将子 Session 最后一个 text part 包装为 <span class="inline-code">&lt;task_result&gt;</span> 返回</div></div>
+
+<h3>7.3 关键实现细节</h3>
+<pre><code>// 子 Session 创建时的权限注入
+const session = await Session.create({
+    parentID: ctx.sessionID,
+    title: params.description + ` (@${agent.name} subagent)`,
+    permission: [
+        { permission: "todowrite", pattern: "*", action: "deny" },  // 禁止写 Todo
+        { permission: "todoread", pattern: "*", action: "deny" },   // 禁止读 Todo
+        ...(hasTaskPermission ? [] : [
+            { permission: "task", pattern: "*", action: "deny" },   // 防止嵌套子 Agent
+        ]),
+    ],
+})
+
+// 结果返回格式
+const output = [
+    `task_id: ${session.id} (for resuming to continue this task if needed)`,
+    "",
+    "&lt;task_result&gt;",
+    text,
+    "&lt;/task_result&gt;",
+].join("\n")</code></pre>
+
+<div class="card">
+<h3>task_id — 会话恢复机制</h3>
+<p>TaskTool 支持 <span class="inline-code">task_id</span> 参数，允许主 Agent 恢复之前的子 Session 继续对话，而非每次创建新 Session。这对于需要多轮交互的研究任务非常重要。</p>
+<pre><code>// 如果有 task_id 且 session 存在，则复用
+if (params.task_id) {
+    const found = await Session.get(params.task_id).catch(() => {})
+    if (found) return found   // 复用已有 session
+}
+// 否则创建新 session
+return await Session.create({ parentID: ctx.sessionID, ... })</code></pre>
+</div>
+</div>
+
+<!-- 第8章 -->
+<div class="section" id="ch8">
+<h2>八、子 Session 隔离与权限继承</h2>
+
+<p>子 Agent 运行在独立的子 Session 中，通过 <span class="inline-code">parentID</span> 与父 Session 关联：</p>
+
+<div class="card">
+<h3>隔离机制</h3>
+<table>
+<tr><th>维度</th><th>父 Session</th><th>子 Session</th></tr>
+<tr><td>消息历史</td><td>完整的对话历史</td><td>只有新的 prompt</td></tr>
+<tr><td>Todo 工具</td><td>可用</td><td>deny（防止干扰主任务列表）</td></tr>
+<tr><td>Agent 权限</td><td>build 全权限</td><td>Agent 定义中的权限 + session.permission</td></tr>
+<tr><td>模型</td><td>用户选择的模型</td><td>Agent 配置的模型 或 继承父模型</td></tr>
+<tr><td>中止控制</td><td>父 AbortController</td><td>监听父 abort 事件，联动取消</td></tr>
+</table>
+</div>
+
+<pre><code>// 中止联动 — 父 Agent 取消时自动取消子 Agent
+function cancel() {
+    SessionPrompt.cancel(session.id)
+}
+ctx.abort.addEventListener("abort", cancel)
+using _ = defer(() => ctx.abort.removeEventListener("abort", cancel))</code></pre>
+
+<div class="tip">
+<strong>AbortController 联动：</strong>子 Agent 的执行通过事件监听与父 Agent 绑定。当用户在 UI 中点击"Stop"时，父 AbortController.abort() 会级联取消所有正在运行的子 Agent，防止资源泄漏。
+</div>
+</div>
+
+<!-- 第9章 -->
+<div class="section" id="ch9">
+<h2>九、Plan 模式 — 只读分析 Agent</h2>
+
+<p>Plan Agent 是 OpenCode 双模式（Plan/Build）设计的核心。它拥有完整的阅读和分析能力，但<strong>禁止所有代码修改</strong>。</p>
+
+<pre><code>plan: {
+    name: "plan",
+    description: "Plan mode. Disallows all edit tools.",
+    permission: PermissionNext.merge(
+        defaults,
+        PermissionNext.fromConfig({
+            question: "allow",       // 可以向用户提问
+            plan_exit: "allow",      // 可以退出 plan 模式
+            external_directory: {
+                [path.join(Global.Path.data, "plans", "*")]: "allow",
+            },
+            edit: {
+                "*": "deny",                                        // 禁止所有编辑
+                [path.join(".opencode", "plans", "*.md")]: "allow", // 只允许写计划文件
+            },
+        }),
+        user,
+    ),
+    mode: "primary",
+    native: true,
+}</code></pre>
+
+<div class="card">
+<h3>Plan 文件路径约定</h3>
+<pre><code>// 有 VCS（Git）的项目：计划文件存放在项目内
+path.join(Instance.worktree, ".opencode", "plans", ...)
+
+// 无 VCS 的项目：计划文件存放在全局数据目录
+path.join(Global.Path.data, "plans", ...)</code></pre>
+<p>Plan 模式允许编辑的唯一文件是 <span class="inline-code">.opencode/plans/*.md</span> — 这使得 AI 可以在 plan 阶段将分析结论写入 Markdown 文件，然后由 Build Agent 参考实施。</p>
+</div>
+</div>
+
+<!-- 第10章 -->
+<div class="section" id="ch10">
+<h2>十、Plan→Build 切换机制</h2>
+
+<p>Plan 到 Build 的切换通过 <span class="inline-code">PlanExitTool</span> 实现，它巧妙地复用了 Question 工具的 Promise 阻塞机制：</p>
+
+<pre><code>// packages/opencode/src/tool/plan.ts
+export const PlanExitTool = Tool.define("plan_exit", {
+    async execute(_params, ctx) {
+        // 复用 Question.ask() 向用户确认
+        const answers = await Question.ask({
+            sessionID: ctx.sessionID,
+            questions: [{
+                question: `Plan at ${plan} is complete. Would you like to switch to the build agent?`,
+                header: "Build Agent",
+                custom: false,
+                options: [
+                    { label: "Yes", description: "Switch to build agent and start implementing" },
+                    { label: "No", description: "Stay with plan agent to continue refining" },
+                ],
+            }],
+        })
+        const answer = answers[0]?.[0]
+        if (answer === "No")
+            throw new Question.RejectedError()  // 用户选择"否"则中断
+
+        // 创建 build Agent 的用户消息，触发模式切换
+        const id = Identifier.ascending("message")
+        await Session.updateMessage({
+            id,
+            sessionID: ctx.sessionID,
+            role: "user",
+            agent: "build",         // 关键：切换到 build Agent
+            model: lastUser.model,
+        })
+        // 注入 plan 文件内容作为上下文
+        await Session.updatePart({
+            id: Identifier.ascending("part"),
+            messageID: id,
+            sessionID: ctx.sessionID,
+            type: "text",
+            text: BUILD_SWITCH.replace("{plan}", planContent),
+        })
+    },
+})</code></pre>
+
+<div class="flow">
+<div class="node">Plan Agent</div>
+<div class="arrow">→</div>
+<div class="node">PlanExitTool</div>
+<div class="arrow">→</div>
+<div class="node">Question.ask()</div>
+<div class="arrow">→</div>
+<div class="node">用户确认</div>
+<div class="arrow">→</div>
+<div class="node">Build Agent</div>
+</div>
+</div>
+
+<!-- 第11章 -->
+<div class="section" id="ch11">
+<h2>十一、自定义 Agent — 配置驱动的扩展</h2>
+
+<p>用户可以在 <span class="inline-code">opencode.json</span> 中定义自定义 Agent，系统会在初始化时将其合并到 Agent Registry：</p>
+
+<pre><code>// opencode.json
+{
+  "agent": {
+    "reviewer": {
+      "description": "Code review specialist",
+      "model": "anthropic/claude-sonnet-4-20250514",
+      "prompt": "You are a code review expert...",
+      "mode": "subagent",
+      "permission": {
+        "edit": { "*": "deny" },
+        "bash": { "*": "deny" }
+      }
+    },
+    "build": {
+      // 修改内置 build Agent 的配置
+      "steps": 50
+    },
+    "explore": {
+      "disable": true   // 禁用内置 explore Agent
+    }
+  }
+}</code></pre>
+
+<h3>配置加载逻辑</h3>
+<pre><code>// agent.ts state() 中的配置合并
+for (const [key, value] of Object.entries(cfg.agent ?? {})) {
+    if (value.disable) {
+        delete result[key]          // 禁用已有 Agent
+        continue
+    }
+    let item = result[key]
+    if (!item)
+        item = result[key] = {      // 创建全新 Agent
+            name: key,
+            mode: "all",
+            permission: PermissionNext.merge(defaults, user),
+            options: {},
+            native: false,
+        }
+    // 合并各项配置
+    item.model = value.model ?? item.model
+    item.prompt = value.prompt ?? item.prompt
+    item.steps = value.steps ?? item.steps
+    item.permission = PermissionNext.merge(
+        item.permission,
+        PermissionNext.fromConfig(value.permission ?? {})
+    )
+}</code></pre>
+
+<div class="warn">
+<strong>注意：</strong>自定义 Agent 的权限是在 defaults + user 基础上追加，而不是替换。如果你希望一个自定义 Agent 只有读权限，需要显式设置 <span class="inline-code">"edit": {"*": "deny"}</span>。
+</div>
+</div>
+
+<!-- 第12章 -->
+<div class="section" id="ch12">
+<h2>十二、Agent.generate — AI 辅助创建 Agent</h2>
+
+<p>OpenCode 还提供了一个用 AI 生成 Agent 配置的功能：</p>
+
+<pre><code>// agent.ts
+export async function generate(input: {
+    description: string
+    model?: { providerID: string; modelID: string }
+}) {
+    const model = await Provider.getModel(...)
+    const language = await Provider.getLanguage(model)
+
+    const result = await generateObject({
+        model: language,
+        temperature: 0.3,
+        messages: [
+            { role: "system", content: PROMPT_GENERATE },
+            { role: "user", content: `Create an agent configuration based on: "${input.description}"
+              IMPORTANT: These already exist: ${existing.map(i => i.name).join(", ")}` },
+        ],
+        schema: z.object({
+            identifier: z.string(),
+            whenToUse: z.string(),
+            systemPrompt: z.string(),
+        }),
+    })
+    return result.object
+}</code></pre>
+
+<p>这个功能使用 <span class="inline-code">generateObject</span>（AI SDK 的结构化输出）让 AI 根据描述生成 Agent 的 identifier、使用时机和 system prompt，然后用户可以将其写入 opencode.json。</p>
+</div>
+
+<!-- 第13章 -->
+<div class="section" id="ch13">
+<h2>十三、Doom Loop 检测与防护</h2>
+
+<p>在 processor.ts 的 ReAct 循环中，OpenCode 实现了一个精巧的"死循环检测"机制：</p>
+
+<pre><code>// session/processor.ts
+const DOOM_LOOP_THRESHOLD = 3
+
+// 在 tool-call 事件中检测
+case "tool-call": {
+    const parts = await MessageV2.parts(input.assistantMessage.id)
+    const lastThree = parts.slice(-DOOM_LOOP_THRESHOLD)
+
+    if (
+        lastThree.length === DOOM_LOOP_THRESHOLD &&
+        lastThree.every(p =>
+            p.type === "tool" &&
+            p.tool === value.toolName &&                    // 同一个工具
+            p.state.status !== "pending" &&
+            JSON.stringify(p.state.input) === JSON.stringify(value.input)  // 相同参数
+        )
+    ) {
+        // 触发 doom_loop 权限请求
+        await PermissionNext.ask({
+            permission: "doom_loop",
+            patterns: [value.toolName],
+            sessionID: input.assistantMessage.sessionID,
+            metadata: { tool: value.toolName, input: value.input },
+            always: [value.toolName],
+            ruleset: agent.permission,
+        })
+    }
+}</code></pre>
+
+<div class="danger">
+<strong>触发条件：</strong>当模型连续 3 次调用同一个工具且参数完全相同时，系统认为进入了死循环。此时会触发 <span class="inline-code">doom_loop</span> 权限请求，让用户决定是否继续。默认配置中 doom_loop 是 "ask"，需要用户确认。
+</div>
+</div>
+
+<!-- 第14章 -->
+<div class="section" id="ch14">
+<h2>十四、完整生命周期总结</h2>
+
+<div class="card">
+<h3>Agent 系统核心规律</h3>
+<table>
+<tr><th>规律</th><th>体现</th></tr>
+<tr><td><strong>权限即能力边界</strong></td><td>每个 Agent 的 permission 精确控制它能使用的工具，plan 不能 edit，explore 只能搜索</td></tr>
+<tr><td><strong>Session 隔离</strong></td><td>子 Agent 运行在独立的子 Session 中，消息历史、Todo 状态完全隔离</td></tr>
+<tr><td><strong>AbortController 联动</strong></td><td>父子 Agent 通过 abort 事件绑定，一键停止全部取消</td></tr>
+<tr><td><strong>动态工具描述</strong></td><td>TaskTool 的描述中动态注入可用 Agent 列表，模型据此选择调用哪个子 Agent</td></tr>
+<tr><td><strong>三层权限合并</strong></td><td>defaults（基础）→ agent（Agent 特有）→ user（用户覆盖），后者覆盖前者</td></tr>
+<tr><td><strong>Question 复用</strong></td><td>PlanExitTool 复用 Question.ask() 实现 Plan→Build 审批，统一的人机交互原语</td></tr>
+<tr><td><strong>配置驱动</strong></td><td>opencode.json 可以创建新 Agent、修改内置 Agent、甚至禁用内置 Agent</td></tr>
+<tr><td><strong>task_id 会话恢复</strong></td><td>子 Agent Session 可以被恢复继续，实现多轮交互而非一次性任务</td></tr>
+</table>
+</div>
+
+<div class="tip">
+<strong>下一篇预告：</strong>Session 生命周期与 ReAct 循环 — 深入 <span class="inline-code">loop()</span> 函数，解析消息构建、step 计数、Compaction 触发、insertReminders 等核心逻辑。
+</div>
+</div>
+
+</div>
+</body>
+</html>

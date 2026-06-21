@@ -1,0 +1,813 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OpenCode 工具链层实现原理</title>
+<style>
+:root { --primary: #2563eb; --secondary: #7c3aed; --success: #10b981; --warning: #f59e0b; --danger: #ef4444; --info: #06b6d4; --bg: #f8fafc; --card: #fff; --text: #1e293b; --muted: #64748b; --border: #e2e8f0; --code-bg: #0f172a; }
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Noto Sans SC', sans-serif; line-height: 1.8; color: var(--text); background: var(--bg); }
+.container { max-width: 1100px; margin: 0 auto; padding: 20px; }
+.hero { background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 50%, #312e81 100%); color: white; padding: 60px 30px; text-align: center; border-radius: 24px; margin-bottom: 30px; position: relative; overflow: hidden; }
+.hero::before { content: ''; position: absolute; top: -50%; left: -50%; width: 200%; height: 200%; background: radial-gradient(circle, rgba(99,102,241,0.1) 0%, transparent 70%); }
+.hero h1 { font-size: 2.4em; margin-bottom: 15px; position: relative; }
+.hero .subtitle { color: #a5b4fc; font-size: 1.15em; max-width: 800px; margin: 0 auto 20px; position: relative; }
+.hero .tags { display: flex; justify-content: center; gap: 12px; flex-wrap: wrap; position: relative; }
+.hero .tag { background: rgba(255,255,255,0.12); padding: 6px 16px; border-radius: 20px; font-size: 0.9em; border: 1px solid rgba(255,255,255,0.2); }
+.toc { background: var(--card); border: 2px solid var(--border); border-radius: 16px; padding: 24px; margin-bottom: 28px; }
+.toc h3 { color: var(--primary); margin-bottom: 12px; font-size: 1.15em; }
+.toc ol { columns: 2; column-gap: 30px; padding-left: 22px; }
+.toc li { margin: 6px 0; }
+.toc a { color: var(--text); text-decoration: none; }
+.toc a:hover { color: var(--primary); text-decoration: underline; }
+.section { background: var(--card); border-radius: 18px; padding: 32px; margin-bottom: 28px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.07), 0 2px 4px -2px rgba(0,0,0,0.05); }
+.section h2 { color: var(--primary); font-size: 1.5em; margin-bottom: 20px; padding-bottom: 12px; border-bottom: 3px solid var(--primary); }
+.section h3 { color: var(--secondary); font-size: 1.2em; margin: 24px 0 12px 0; }
+.section h4 { color: var(--text); font-size: 1.05em; margin: 18px 0 8px 0; }
+pre { background: var(--code-bg); color: #e2e8f0; padding: 20px; border-radius: 12px; overflow-x: auto; margin: 16px 0; font-family: 'JetBrains Mono', 'Fira Code', monospace; font-size: 0.88em; line-height: 1.7; }
+code { background: #e2e8f0; padding: 2px 7px; border-radius: 4px; font-family: 'JetBrains Mono', 'Fira Code', monospace; font-size: 0.88em; }
+pre code { background: transparent; padding: 0; }
+.box { padding: 18px 22px; border-radius: 0 12px 12px 0; margin: 18px 0; font-size: 0.98em; line-height: 1.9; }
+.box-blue { background: linear-gradient(135deg, #dbeafe, #bfdbfe); border-left: 4px solid var(--primary); }
+.box-green { background: linear-gradient(135deg, #d1fae5, #a7f3d0); border-left: 4px solid var(--success); }
+.box-purple { background: linear-gradient(135deg, #ede9fe, #ddd6fe); border-left: 4px solid var(--secondary); }
+.box-yellow { background: linear-gradient(135deg, #fef3c7, #fde68a); border-left: 4px solid var(--warning); }
+.box-red { background: linear-gradient(135deg, #fee2e2, #fecaca); border-left: 4px solid var(--danger); }
+.box-cyan { background: linear-gradient(135deg, #cffafe, #a5f3fc); border-left: 4px solid var(--info); }
+table { width: 100%; border-collapse: collapse; margin: 16px 0; border-radius: 12px; overflow: hidden; box-shadow: 0 2px 4px rgba(0,0,0,0.06); }
+th { background: var(--primary); color: white; padding: 14px 16px; text-align: left; font-weight: 600; font-size: 0.95em; }
+td { padding: 12px 16px; border-bottom: 1px solid var(--border); font-size: 0.95em; }
+tr:nth-child(even) { background: #f8fafc; }
+tr:hover { background: #f1f5f9; }
+.diagram-container { background: white; border: 2px solid var(--border); border-radius: 16px; margin: 20px 0; overflow-x: auto; }
+.step { display: flex; gap: 16px; margin: 16px 0; padding: 20px; background: linear-gradient(135deg, #f8fafc, #f1f5f9); border-radius: 14px; border-left: 5px solid var(--primary); }
+.step.green { border-left-color: var(--success); }
+.step.purple { border-left-color: var(--secondary); }
+.step.yellow { border-left-color: var(--warning); }
+.step.red { border-left-color: var(--danger); }
+.step .num { min-width: 40px; height: 40px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 1.1em; color: white; background: var(--primary); flex-shrink: 0; }
+.step.green .num { background: var(--success); }
+.step.purple .num { background: var(--secondary); }
+.step.yellow .num { background: var(--warning); }
+.step.red .num { background: var(--danger); }
+.step .content { flex: 1; }
+.step .title { font-weight: 700; font-size: 1.05em; margin-bottom: 6px; }
+.step .desc { color: var(--muted); margin-top: 8px; }
+.adv-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; margin: 20px 0; }
+.adv-card { background: white; border: 2px solid var(--border); border-radius: 14px; padding: 20px; transition: transform 0.2s, box-shadow 0.2s; }
+.adv-card:hover { transform: translateY(-2px); box-shadow: 0 8px 16px rgba(0,0,0,0.1); }
+.adv-card .icon { font-size: 2em; margin-bottom: 10px; }
+.adv-card h4 { color: var(--primary); margin-bottom: 8px; font-size: 1.05em; }
+.adv-card p { color: var(--muted); font-size: 0.95em; }
+.footer { text-align: center; padding: 30px; color: var(--muted); border-top: 1px solid var(--border); margin-top: 30px; }
+ul, ol { margin: 10px 0; padding-left: 22px; }
+li { margin: 6px 0; }
+</style>
+</head>
+<body>
+<div class="container">
+
+<div class="hero">
+    <h1>🔧 OpenCode 工具链层实现原理</h1>
+    <p class="subtitle">
+        深度解析 OpenCode 如何构建一套声明式、可扩展的工具链体系，让 Agent 拥有"手"的能力。<br>
+        从 Tool.define() 统一接口到 9 层模糊匹配编辑、从 Tree-sitter 命令解析到子 Agent 上下文隔离。
+    </p>
+    <div class="tags">
+        <span class="tag">Tool.define 统一接口</span>
+        <span class="tag">24 个内置工具</span>
+        <span class="tag">9 层 Replacer 策略</span>
+        <span class="tag">Tree-sitter AST</span>
+        <span class="tag">BashArity 命令字典</span>
+        <span class="tag">Permission 预过滤</span>
+        <span class="tag">Truncation 溢出保护</span>
+        <span class="tag">Batch 并行执行</span>
+    </div>
+</div>
+
+<div class="toc">
+    <h3>📑 目录</h3>
+    <ol>
+        <li><a href="#s1">核心洞察：工具即策略</a></li>
+        <li><a href="#s2">Tool.define：统一工具定义接口</a></li>
+        <li><a href="#s3">ToolRegistry：工具注册中心</a></li>
+        <li><a href="#s4">工具全景：6 大类 24 个工具</a></li>
+        <li><a href="#s5">Bash 工具：Tree-sitter 命令解析与权限双请求</a></li>
+        <li><a href="#s6">Edit 工具：9 层模糊匹配替换策略</a></li>
+        <li><a href="#s7">Task 工具：子 Agent 上下文隔离</a></li>
+        <li><a href="#s8">Permission 集成：disabled 预过滤 + 运行时拦截</a></li>
+        <li><a href="#s9">Truncation 系统：输出溢出保护</a></li>
+        <li><a href="#s10">Batch 工具：并行执行引擎</a></li>
+        <li><a href="#s11">模型适配与 Plugin 扩展</a></li>
+        <li><a href="#s12">设计优势总结</a></li>
+    </ol>
+</div>
+
+<!-- Section 1 -->
+<div class="section" id="s1">
+    <h2>一、核心洞察：工具即策略</h2>
+
+    <div class="box box-blue">
+        <strong>一句话定义：</strong>工具链层是 Agent 的"双手" —— 每个工具不仅是一个功能单元，更是一个 <strong>Harness 策略</strong>。<br><br>
+        Task 解决上下文污染问题，Todo 解决规划跑偏问题，Question 解决关键决策不确定性问题，<br>
+        Bash 解决执行环境安全问题，Edit 解决代码修改精确性问题，Truncation 解决上下文溢出问题。
+    </div>
+
+    <div class="diagram-container" style="padding: 25px;">
+        <svg width="850" height="360" viewBox="0 0 850 360">
+            <text x="425" y="28" text-anchor="middle" fill="#1e293b" font-size="16" font-weight="bold">工具链层的 Harness 策略映射</text>
+            <g transform="translate(20,50)">
+                <rect width="260" height="280" rx="16" fill="#dbeafe" stroke="#93c5fd" stroke-width="2"/>
+                <text x="130" y="30" text-anchor="middle" fill="#1e40af" font-size="14" font-weight="bold">🔍 感知类工具</text>
+                <text x="130" y="52" text-anchor="middle" fill="#64748b" font-size="10">让 Agent "看到" 代码世界</text>
+                <line x1="16" y1="62" x2="244" y2="62" stroke="#93c5fd" stroke-width="1"/>
+                <text x="20" y="82" fill="#1e293b" font-size="11">• Read — 读取文件内容</text>
+                <text x="20" y="102" fill="#1e293b" font-size="11">• Glob — 按模式查找文件</text>
+                <text x="20" y="122" fill="#1e293b" font-size="11">• Grep — 正则搜索内容</text>
+                <text x="20" y="142" fill="#1e293b" font-size="11">• Ls — 列出目录结构</text>
+                <text x="20" y="162" fill="#1e293b" font-size="11">• LSP — 语言服务（跳转/引用）</text>
+                <text x="20" y="182" fill="#1e293b" font-size="11">• WebFetch — 抓取网页内容</text>
+                <text x="20" y="202" fill="#1e293b" font-size="11">• WebSearch — 联网搜索</text>
+                <text x="20" y="222" fill="#1e293b" font-size="11">• CodeSearch — API 文档搜索</text>
+                <text x="20" y="250" fill="#1e40af" font-size="10">解决：信息获取与代码理解</text>
+                <text x="20" y="270" fill="#1e40af" font-size="10">策略：结构化输入代替盲目 bash</text>
+            </g>
+            <g transform="translate(300,50)">
+                <rect width="260" height="280" rx="16" fill="#d1fae5" stroke="#6ee7b7" stroke-width="2"/>
+                <text x="130" y="30" text-anchor="middle" fill="#065f46" font-size="14" font-weight="bold">✏️ 操作类工具</text>
+                <text x="130" y="52" text-anchor="middle" fill="#64748b" font-size="10">让 Agent "修改" 代码世界</text>
+                <line x1="16" y1="62" x2="244" y2="62" stroke="#6ee7b7" stroke-width="1"/>
+                <text x="20" y="82" fill="#1e293b" font-size="11">• Edit — 精确替换（9层匹配）</text>
+                <text x="20" y="102" fill="#1e293b" font-size="11">• Write — 整文件写入</text>
+                <text x="20" y="122" fill="#1e293b" font-size="11">• MultiEdit — 批量编辑</text>
+                <text x="20" y="142" fill="#1e293b" font-size="11">• ApplyPatch — diff 格式补丁</text>
+                <text x="20" y="162" fill="#1e293b" font-size="11">• Bash — 执行终端命令</text>
+                <text x="20" y="192" fill="#64748b" font-size="10">共同特征：</text>
+                <text x="20" y="212" fill="#065f46" font-size="10">✓ 自动触发 LSP 诊断</text>
+                <text x="20" y="232" fill="#065f46" font-size="10">✓ 生成 diff 元数据供 UI 渲染</text>
+                <text x="20" y="252" fill="#065f46" font-size="10">✓ FileTime 锁防止并发冲突</text>
+                <text x="20" y="272" fill="#065f46" font-size="10">✓ 通过 ctx.ask 检查编辑权限</text>
+            </g>
+            <g transform="translate(580,50)">
+                <rect width="250" height="280" rx="16" fill="#ede9fe" stroke="#a78bfa" stroke-width="2"/>
+                <text x="125" y="30" text-anchor="middle" fill="#5b21b6" font-size="14" font-weight="bold">🧠 编排类工具</text>
+                <text x="125" y="52" text-anchor="middle" fill="#64748b" font-size="10">让 Agent "管理" 自身行为</text>
+                <line x1="16" y1="62" x2="234" y2="62" stroke="#a78bfa" stroke-width="1"/>
+                <text x="20" y="82" fill="#1e293b" font-size="11">• Task — 子 Agent 委派</text>
+                <text x="20" y="102" fill="#1e293b" font-size="11">• TodoWrite — 任务计划追踪</text>
+                <text x="20" y="122" fill="#1e293b" font-size="11">• Question — 向用户提问</text>
+                <text x="20" y="142" fill="#1e293b" font-size="11">• Batch — 并行工具执行</text>
+                <text x="20" y="162" fill="#1e293b" font-size="11">• Skill — 加载领域技能</text>
+                <text x="20" y="182" fill="#1e293b" font-size="11">• PlanExit — 模式切换</text>
+                <text x="20" y="210" fill="#64748b" font-size="10">解决的高层问题：</text>
+                <text x="20" y="230" fill="#5b21b6" font-size="10">上下文隔离、规划跑偏</text>
+                <text x="20" y="250" fill="#5b21b6" font-size="10">人在回路、并行效率</text>
+                <text x="20" y="270" fill="#5b21b6" font-size="10">领域知识注入</text>
+            </g>
+        </svg>
+    </div>
+</div>
+
+<!-- Section 2 -->
+<div class="section" id="s2">
+    <h2>二、Tool.define：统一工具定义接口</h2>
+    <p>所有工具通过 <code>Tool.define()</code> 统一声明，它自动提供参数校验、错误格式化和输出截断：</p>
+
+    <pre><code>// tool.ts — Tool.define 核心结构
+export namespace Tool {
+    export interface Info {
+        id: string
+        init: (ctx?: InitContext) => Promise<{
+            description: string           // 工具描述（来自 .txt 文件）
+            parameters: ZodType           // Zod schema 参数定义
+            execute(args, ctx): Promise<{
+                title: string             // UI 展示标题
+                metadata: Metadata        // 结构化元数据（diff、diagnostics等）
+                output: string            // 文本输出（会被自动截断）
+                attachments?: FilePart[]  // 可选的文件附件（图片等）
+            }>
+            formatValidationError?(error: ZodError): string  // 自定义校验错误
+        }>
+    }
+
+    export function define(id, init): Info {
+        return {
+            id,
+            init: async (initCtx) => {
+                const toolInfo = ...
+                toolInfo.execute = async (args, ctx) => {
+                    // 1. 自动 Zod 参数校验
+                    toolInfo.parameters.parse(args)
+                    // 2. 执行实际逻辑
+                    const result = await execute(args, ctx)
+                    // 3. 自动 Truncation 截断
+                    const truncated = await Truncate.output(result.output, {}, initCtx?.agent)
+                    return { ...result, output: truncated.content }
+                }
+                return toolInfo
+            },
+        }
+    }
+}</code></pre>
+
+    <h3>2.1 Tool.Context：工具运行时上下文</h3>
+    <pre><code>// 每个工具执行时都能访问的上下文
+type Context = {
+    sessionID: string         // 当前会话
+    messageID: string         // 当前消息
+    agent: string             // 当前 Agent 名
+    abort: AbortSignal        // 中止信号
+    callID?: string           // 工具调用 ID
+    messages: MessageV2[]     // 历史消息（用于子目录指令发现等）
+    metadata(input): void     // 实时更新元数据（UI 渲染用）
+    ask(input): Promise<void> // 请求权限（阻塞直到用户响应）
+}</code></pre>
+
+    <div class="box box-green">
+        <strong>设计精妙之处：</strong><code>Tool.define()</code> 用装饰器模式自动注入了三个横切关注点：<br>
+        ① <strong>Zod 校验</strong> — 参数不合法时直接抛错，不会执行业务逻辑<br>
+        ② <strong>Truncation</strong> — 超长输出自动截断并持久化到文件<br>
+        ③ <strong>formatValidationError</strong> — 允许工具自定义错误提示（如 BatchTool 的友好格式）
+    </div>
+</div>
+
+<!-- Section 3 -->
+<div class="section" id="s3">
+    <h2>三、ToolRegistry：工具注册中心</h2>
+    <p><code>ToolRegistry</code> 管理所有可用工具的注册与发现，支持三个来源：</p>
+
+    <div class="step">
+        <div class="num">1</div>
+        <div class="content">
+            <div class="title">内置工具（硬编码）</div>
+            <div class="desc">18 个核心工具，在 all() 中直接列出，始终可用（部分受 Flag 控制）</div>
+        </div>
+    </div>
+    <div class="step green">
+        <div class="num">2</div>
+        <div class="content">
+            <div class="title">自定义工具（文件系统发现）</div>
+            <div class="desc">扫描 .opencode/tools/*.ts 和 .opencode/tool/*.ts，自动加载导出的 ToolDefinition</div>
+            <pre style="margin:8px 0"><code>// 从配置目录扫描自定义工具
+const matches = await Config.directories().then((dirs) =>
+    dirs.flatMap((dir) =>
+        Glob.scanSync("{tool,tools}/*.{js,ts}", {cwd: dir, absolute: true})
+    ))
+for (const match of matches) {
+    const mod = await import(pathToFileURL(match).href)
+    // 每个导出都注册为独立工具
+    for (const [id, def] of Object.entries(mod)) {
+        custom.push(fromPlugin(id === "default" ? namespace : `${namespace}_${id}`, def))
+    }
+}</code></pre>
+        </div>
+    </div>
+    <div class="step purple">
+        <div class="num">3</div>
+        <div class="content">
+            <div class="title">Plugin 工具（插件注入）</div>
+            <div class="desc">Plugin 通过 plugin.tool 字段注册工具，与自定义工具共享 fromPlugin() 适配逻辑</div>
+        </div>
+    </div>
+
+    <h3>3.1 条件注册：Feature Flag 控制</h3>
+    <pre><code>// registry.ts — 条件注册逻辑
+return [
+    InvalidTool,                                    // 始终存在（兜底工具）
+    ...(question ? [QuestionTool] : []),            // 仅 app/cli/desktop 客户端
+    BashTool, ReadTool, GlobTool, GrepTool,         // 核心四件套
+    EditTool, WriteTool,                             // 编辑工具
+    TaskTool, WebFetchTool, TodoWriteTool,
+    WebSearchTool, CodeSearchTool, SkillTool,        // 搜索+技能
+    ApplyPatchTool,
+    ...(Flag.OPENCODE_EXPERIMENTAL_LSP_TOOL ? [LspTool] : []),    // 实验性
+    ...(config.experimental?.batch_tool === true ? [BatchTool] : []), // 实验性
+    ...(Flag.OPENCODE_EXPERIMENTAL_PLAN_MODE && Flag.OPENCODE_CLIENT === "cli"
+        ? [PlanExitTool] : []),                                     // 仅 CLI + 实验性
+    ...custom,                                       // 自定义工具最后（可覆盖）
+]</code></pre>
+
+    <div class="box box-yellow">
+        <strong>InvalidTool 的巧妙设计：</strong>当 LLM 调用一个不存在的工具时，AI SDK 会生成一个 InvalidTool 调用，
+        携带原始工具名和错误信息。这让 Agent 能从工具名错误中自我纠正，而不是直接失败。
+    </div>
+</div>
+
+<!-- Section 4 -->
+<div class="section" id="s4">
+    <h2>四、工具全景：6 大类 24 个工具</h2>
+
+    <table>
+        <tr><th>分类</th><th>工具</th><th>权限类型</th><th>核心特点</th></tr>
+        <tr><td rowspan="4"><strong>文件感知</strong></td><td>read</td><td>read</td><td>支持图片/PDF附件，自动注入子目录指令，行号偏移分页</td></tr>
+        <tr><td>glob</td><td>glob</td><td>Ripgrep 驱动，按 mtime 排序，限 100 条</td></tr>
+        <tr><td>grep</td><td>grep</td><td>Ripgrep 驱动，行级匹配，限 100 条</td></tr>
+        <tr><td>lsp</td><td>lsp</td><td>9 种 LSP 操作（定义/引用/Hover/符号等），实验性</td></tr>
+        <tr><td rowspan="5"><strong>文件操作</strong></td><td>edit</td><td>edit</td><td>9 层 Replacer 模糊匹配，LSP 诊断反馈，FileTime 锁</td></tr>
+        <tr><td>write</td><td>edit</td><td>整文件写入，支持新建和覆盖，项目级诊断</td></tr>
+        <tr><td>multiedit</td><td>edit</td><td>批量编辑操作（复用 Edit 引擎）</td></tr>
+        <tr><td>apply_patch</td><td>edit</td><td>diff 格式补丁，支持 add/update/delete/move</td></tr>
+        <tr><td>bash</td><td>bash</td><td>Tree-sitter 解析，外部目录检测，超时控制</td></tr>
+        <tr><td rowspan="3"><strong>网络</strong></td><td>webfetch</td><td>webfetch</td><td>HTML→Markdown 转换，Cloudflare 重试，5MB 限制</td></tr>
+        <tr><td>websearch</td><td>websearch</td><td>Exa API 驱动，SSE 流式响应，25s 超时</td></tr>
+        <tr><td>codesearch</td><td>codesearch</td><td>Exa API 代码搜索，token 数量可控</td></tr>
+        <tr><td rowspan="4"><strong>编排</strong></td><td>task</td><td>task</td><td>子 Agent 创建，Session 隔离，权限继承控制</td></tr>
+        <tr><td>todowrite</td><td>todowrite</td><td>任务计划管理，子 Agent 默认禁止</td></tr>
+        <tr><td>question</td><td>question</td><td>向用户提问，支持多选/自定义/推荐选项</td></tr>
+        <tr><td>batch</td><td>batch</td><td>并行执行最多 25 个工具调用</td></tr>
+        <tr><td rowspan="3"><strong>扩展</strong></td><td>skill</td><td>skill</td><td>加载 SKILL.md 技能文件 + 附件列表</td></tr>
+        <tr><td>plan_exit</td><td>—</td><td>Plan→Build 模式切换，需用户确认</td></tr>
+        <tr><td>invalid</td><td>—</td><td>兜底工具，处理 LLM 的工具名错误</td></tr>
+    </table>
+
+    <div class="box box-blue">
+        <strong>edit 和 write 共享 "edit" 权限类型。</strong>PermissionNext.disabled() 中有特殊映射：<br>
+        <code>const EDIT_TOOLS = ["edit", "write", "patch", "multiedit"]</code><br>
+        当用户 deny "edit" 权限时，所有文件修改类工具都会被一次性禁用。
+    </div>
+</div>
+
+<!-- Section 5 -->
+<div class="section" id="s5">
+    <h2>五、Bash 工具：Tree-sitter 命令解析与权限双请求</h2>
+    <p>Bash 是最复杂的工具。它在执行前通过 <strong>Tree-sitter</strong> 解析命令 AST，提取出所有子命令和路径参数：</p>
+
+    <div class="diagram-container" style="padding: 25px;">
+        <svg width="850" height="300" viewBox="0 0 850 300">
+            <text x="425" y="28" text-anchor="middle" fill="#1e293b" font-size="15" font-weight="bold">Bash 工具执行流程：解析 → 权限 → 执行</text>
+            <g transform="translate(30,50)">
+                <rect width="240" height="220" rx="14" fill="#dbeafe" stroke="#93c5fd" stroke-width="2"/>
+                <text x="120" y="25" text-anchor="middle" fill="#1e40af" font-size="13" font-weight="bold">① Tree-sitter 解析</text>
+                <line x1="16" y1="38" x2="224" y2="38" stroke="#93c5fd" stroke-width="1"/>
+                <text x="16" y="58" fill="#1e293b" font-size="11">解析命令为 AST：</text>
+                <text x="16" y="78" fill="#1e40af" font-size="10">"rm -rf /tmp/foo"</text>
+                <text x="16" y="98" fill="#1e40af" font-size="10">  → command_name: "rm"</text>
+                <text x="16" y="118" fill="#1e40af" font-size="10">  → args: ["-rf", "/tmp/foo"]</text>
+                <text x="16" y="148" fill="#64748b" font-size="10">提取：</text>
+                <text x="16" y="168" fill="#1e293b" font-size="10">• patterns: 完整命令文本</text>
+                <text x="16" y="188" fill="#1e293b" font-size="10">• always: BashArity 前缀 + "*"</text>
+                <text x="16" y="208" fill="#1e293b" font-size="10">• directories: 外部路径集合</text>
+            </g>
+            <text x="285" y="160" fill="#7c3aed" font-size="22">→</text>
+            <g transform="translate(310,50)">
+                <rect width="240" height="220" rx="14" fill="#fef3c7" stroke="#fbbf24" stroke-width="2"/>
+                <text x="120" y="25" text-anchor="middle" fill="#92400e" font-size="13" font-weight="bold">② 权限双请求</text>
+                <line x1="16" y1="38" x2="224" y2="38" stroke="#fbbf24" stroke-width="1"/>
+                <text x="16" y="58" fill="#1e293b" font-size="11">第一层：external_directory</text>
+                <text x="16" y="78" fill="#92400e" font-size="10">if 命令操作路径在项目外：</text>
+                <text x="16" y="98" fill="#92400e" font-size="10">  ask("external_directory")</text>
+                <text x="16" y="128" fill="#1e293b" font-size="11">第二层：bash</text>
+                <text x="16" y="148" fill="#92400e" font-size="10">对每个子命令：</text>
+                <text x="16" y="168" fill="#92400e" font-size="10">  patterns = ["rm -rf /tmp/foo"]</text>
+                <text x="16" y="188" fill="#92400e" font-size="10">  always = ["rm *"]</text>
+                <text x="16" y="208" fill="#64748b" font-size="10">always 用于"记住"此命令模式</text>
+            </g>
+            <text x="565" y="160" fill="#7c3aed" font-size="22">→</text>
+            <g transform="translate(590,50)">
+                <rect width="240" height="220" rx="14" fill="#d1fae5" stroke="#6ee7b7" stroke-width="2"/>
+                <text x="120" y="25" text-anchor="middle" fill="#065f46" font-size="13" font-weight="bold">③ spawn 执行</text>
+                <line x1="16" y1="38" x2="224" y2="38" stroke="#6ee7b7" stroke-width="1"/>
+                <text x="16" y="58" fill="#1e293b" font-size="11">shell = Shell.acceptable()</text>
+                <text x="16" y="78" fill="#1e293b" font-size="11">cwd = workdir || directory</text>
+                <text x="16" y="108" fill="#065f46" font-size="10">Plugin 可注入环境变量：</text>
+                <text x="16" y="128" fill="#065f46" font-size="10">  shell.env → 合并到 process.env</text>
+                <text x="16" y="158" fill="#64748b" font-size="10">输出实时流式更新 metadata</text>
+                <text x="16" y="178" fill="#64748b" font-size="10">超时 = 默认 120s + 100ms 缓冲</text>
+                <text x="16" y="198" fill="#64748b" font-size="10">abort → killTree(proc)</text>
+                <text x="16" y="218" fill="#64748b" font-size="10">metadata.output 限制 30KB</text>
+            </g>
+        </svg>
+    </div>
+
+    <h3>5.1 BashArity：160+ 命令粒度字典</h3>
+    <p>BashArity 将命令解析为"人类可理解的命令模式"，用于权限的 "always approve" 记忆：</p>
+    <pre><code>// arity.ts — BashArity.prefix() 示例
+"git checkout main"     → always = "git checkout *"  (git arity=2)
+"npm run dev"           → always = "npm run dev *"    (npm run arity=3)
+"rm -rf /tmp/foo"       → always = "rm *"             (rm arity=1)
+"docker compose up"     → always = "docker compose up *"(docker compose arity=3)
+"python script.py"      → always = "python script.py *"(default: 取全部)</code></pre>
+
+    <h3>5.2 路径参数解析</h3>
+    <pre><code>// bash.ts — 对 cd/rm/cp/mv/mkdir/touch/chmod/chown/cat 的路径解析
+if (["cd", "rm", "cp", "mv", "mkdir", "touch", "chmod", "chown", "cat"].includes(command[0])) {
+    for (const arg of command.slice(1)) {
+        if (arg.startsWith("-")) continue  // 跳过 flag
+        const resolved = await $`realpath ${arg}`.cwd(cwd).nothrow().text()
+        if (resolved && !Instance.containsPath(resolved)) {
+            directories.add(dir)  // 标记为外部目录，需要权限
+        }
+    }
+}</code></pre>
+
+    <div class="box box-red">
+        <strong>为什么不直接用字符串匹配？</strong>Tree-sitter 能正确处理管道、重定向、子shell等复杂语法。<br>
+        例如 <code>cat foo.txt | grep "error" > out.log</code> 会被解析为 3 个 command 节点，
+        每个都有独立的命令名和参数，确保权限检查不遗漏任何子命令。
+    </div>
+</div>
+
+<!-- Section 6 -->
+<div class="section" id="s6">
+    <h2>六、Edit 工具：9 层模糊匹配替换策略</h2>
+    <p>Edit 是 OpenCode 最精密的工具之一。当 LLM 提供的 oldString 不能精确匹配时，它会逐层尝试 9 种 Replacer 策略：</p>
+
+    <div class="diagram-container" style="padding: 25px;">
+        <svg width="850" height="420" viewBox="0 0 850 420">
+            <text x="425" y="28" text-anchor="middle" fill="#1e293b" font-size="15" font-weight="bold">Edit 工具 9 层 Replacer 瀑布策略</text>
+            <g transform="translate(80,50)">
+                <!-- Layer 1 -->
+                <rect y="0" width="700" height="35" rx="6" fill="#dbeafe" stroke="#93c5fd" stroke-width="1.5"/>
+                <text x="16" y="23" fill="#1e40af" font-size="12" font-weight="bold">① SimpleReplacer</text>
+                <text x="250" y="23" fill="#64748b" font-size="10">精确匹配，content.indexOf(find)</text>
+
+                <!-- Layer 2 -->
+                <rect y="42" width="700" height="35" rx="6" fill="#d1fae5" stroke="#6ee7b7" stroke-width="1.5"/>
+                <text x="16" y="65" fill="#065f46" font-size="12" font-weight="bold">② LineTrimmedReplacer</text>
+                <text x="250" y="65" fill="#64748b" font-size="10">忽略行首尾空格，逐行 trim 后比较</text>
+
+                <!-- Layer 3 -->
+                <rect y="84" width="700" height="35" rx="6" fill="#fef3c7" stroke="#fbbf24" stroke-width="1.5"/>
+                <text x="16" y="107" fill="#92400e" font-size="12" font-weight="bold">③ BlockAnchorReplacer</text>
+                <text x="250" y="107" fill="#64748b" font-size="10">首尾行锚定 + Levenshtein 相似度（≥0.0/≥0.3）</text>
+
+                <!-- Layer 4 -->
+                <rect y="126" width="700" height="35" rx="6" fill="#ede9fe" stroke="#a78bfa" stroke-width="1.5"/>
+                <text x="16" y="149" fill="#5b21b6" font-size="12" font-weight="bold">④ WhitespaceNormalizedReplacer</text>
+                <text x="370" y="149" fill="#64748b" font-size="10">压缩所有空白为单空格后比较</text>
+
+                <!-- Layer 5 -->
+                <rect y="168" width="700" height="35" rx="6" fill="#fee2e2" stroke="#fca5a5" stroke-width="1.5"/>
+                <text x="16" y="191" fill="#991b1b" font-size="12" font-weight="bold">⑤ IndentationFlexibleReplacer</text>
+                <text x="370" y="191" fill="#64748b" font-size="10">去除公共缩进后比较（忽略缩进差异）</text>
+
+                <!-- Layer 6 -->
+                <rect y="210" width="700" height="35" rx="6" fill="#cffafe" stroke="#67e8f9" stroke-width="1.5"/>
+                <text x="16" y="233" fill="#155e75" font-size="12" font-weight="bold">⑥ EscapeNormalizedReplacer</text>
+                <text x="370" y="233" fill="#64748b" font-size="10">反转义 \n \t \" 等转义字符后匹配</text>
+
+                <!-- Layer 7 -->
+                <rect y="252" width="700" height="35" rx="6" fill="#dbeafe" stroke="#93c5fd" stroke-width="1.5"/>
+                <text x="16" y="275" fill="#1e40af" font-size="12" font-weight="bold">⑦ TrimmedBoundaryReplacer</text>
+                <text x="370" y="275" fill="#64748b" font-size="10">去除 find 首尾空行/空格后匹配</text>
+
+                <!-- Layer 8 -->
+                <rect y="294" width="700" height="35" rx="6" fill="#d1fae5" stroke="#6ee7b7" stroke-width="1.5"/>
+                <text x="16" y="317" fill="#065f46" font-size="12" font-weight="bold">⑧ ContextAwareReplacer</text>
+                <text x="370" y="317" fill="#64748b" font-size="10">首尾行锚定 + 中间行 50% 匹配率</text>
+
+                <!-- Layer 9 -->
+                <rect y="336" width="700" height="35" rx="6" fill="#fef3c7" stroke="#fbbf24" stroke-width="1.5"/>
+                <text x="16" y="359" fill="#92400e" font-size="12" font-weight="bold">⑨ MultiOccurrenceReplacer</text>
+                <text x="370" y="359" fill="#64748b" font-size="10">查找所有精确出现位置，配合 replaceAll</text>
+            </g>
+        </svg>
+    </div>
+
+    <pre><code>// edit.ts — 9 层 Replacer 瀑布
+for (const replacer of [
+    SimpleReplacer,              // ① 精确匹配
+    LineTrimmedReplacer,         // ② 忽略行首尾空格
+    BlockAnchorReplacer,         // ③ 首尾锚定 + Levenshtein
+    WhitespaceNormalizedReplacer,// ④ 空白归一化
+    IndentationFlexibleReplacer, // ⑤ 缩进灵活匹配
+    EscapeNormalizedReplacer,    // ⑥ 转义字符还原
+    TrimmedBoundaryReplacer,     // ⑦ 边界裁剪
+    ContextAwareReplacer,        // ⑧ 上下文感知
+    MultiOccurrenceReplacer,     // ⑨ 多次出现处理
+]) {
+    for (const search of replacer(content, oldString)) {
+        const index = content.indexOf(search)
+        if (index === -1) continue
+        if (replaceAll) return content.replaceAll(search, newString)
+        const lastIndex = content.lastIndexOf(search)
+        if (index !== lastIndex) continue  // 多匹配 → 跳过，要求更精确
+        return content.substring(0, index) + newString + content.substring(index + search.length)
+    }
+}</code></pre>
+
+    <div class="box box-purple">
+        <strong>为什么需要 9 层策略？</strong>LLM 生成的 oldString 经常与原文有微小差异：多余的缩进、转义字符差异、
+        行尾空格等。逐层降级策略让 Edit 能在保持安全性的同时，最大化 LLM 编辑的成功率。<br>
+        <strong>关键安全约束：</strong>当某层找到多个匹配时不会盲目替换，而是跳过（要求更精确的上下文），只有唯一匹配才执行。
+    </div>
+</div>
+
+<!-- Section 7 -->
+<div class="section" id="s7">
+    <h2>七、Task 工具：子 Agent 上下文隔离</h2>
+    <p>Task 工具创建独立的子 Session，让子 Agent 在自己的上下文中工作，不污染主对话：</p>
+
+    <pre><code>// task.ts — 子 Agent 创建核心逻辑
+const session = await Session.create({
+    parentID: ctx.sessionID,              // 关联父 Session
+    title: params.description + ` (@${agent.name} subagent)`,
+    permission: [
+        { permission: "todowrite", pattern: "*", action: "deny" },  // 子 Agent 禁止写 Todo
+        { permission: "todoread",  pattern: "*", action: "deny" },  // 子 Agent 禁止读 Todo
+        ...(hasTaskPermission ? [] : [
+            { permission: "task", pattern: "*", action: "deny" },   // 无 task 权限则禁止嵌套
+        ]),
+    ],
+})
+
+// 在子 Session 中执行
+const result = await SessionPrompt.prompt({
+    sessionID: session.id,
+    agent: agent.name,
+    tools: { todowrite: false, todoread: false, ... },  // 显式禁用工具
+    parts: promptParts,
+})
+
+// 返回结果 + task_id（用于恢复）
+return { output: `task_id: ${session.id}\n\n<task_result>\n${text}\n</task_result>` }</code></pre>
+
+    <div class="box box-cyan">
+        <strong>上下文隔离的价值：</strong><br>
+        • 主 Agent 的上下文不会被大量搜索/读取操作膨胀<br>
+        • 子 Agent 可以用不同的模型（explore 用轻量模型）<br>
+        • task_id 允许后续恢复同一子 Session，实现"续接任务"<br>
+        • 子 Agent 默认禁止 todowrite/todoread，避免修改主 Agent 的计划
+    </div>
+
+    <h3>7.1 Agent 列表动态注入</h3>
+    <pre><code>// task.txt 中的 {agents} 占位符在 init 时被替换为可用 Agent 列表
+const agents = await Agent.list().then((x) => x.filter((a) => a.mode !== "primary"))
+const accessibleAgents = caller
+    ? agents.filter((a) => PermissionNext.evaluate("task", a.name, caller.permission).action !== "deny")
+    : agents
+// description = DESCRIPTION.replace("{agents}", accessibleAgents.map(...).join("\n"))</code></pre>
+</div>
+
+<!-- Section 8 -->
+<div class="section" id="s8">
+    <h2>八、Permission 集成：disabled 预过滤 + 运行时拦截</h2>
+    <p>工具链与权限系统有两个交互点：</p>
+
+    <h3>8.1 disabled()：工具注册阶段的预过滤</h3>
+    <pre><code>// permission/next.ts — disabled()
+// 在 LLM.stream() 的 resolveTools() 中调用
+const disabled = PermissionNext.disabled(Object.keys(input.tools), input.agent.permission)
+// 全局 deny 的工具直接从工具列表中删除，LLM 根本看不到它们
+
+export function disabled(tools: string[], ruleset: Ruleset): Set&lt;string&gt; {
+    const result = new Set&lt;string&gt;()
+    for (const tool of tools) {
+        // edit/write/patch/multiedit 统一映射为 "edit" 权限
+        const permission = EDIT_TOOLS.includes(tool) ? "edit" : tool
+        const rule = ruleset.findLast((r) => Wildcard.match(permission, r.permission))
+        if (rule && rule.pattern === "*" && rule.action === "deny") {
+            result.add(tool)
+        }
+    }
+    return result
+}</code></pre>
+
+    <h3>8.2 ctx.ask()：工具执行时的运行时权限</h3>
+    <pre><code>// 每个工具在执行前调用 ctx.ask() 请求权限
+// 例：Edit 工具
+await ctx.ask({
+    permission: "edit",                           // 权限类型
+    patterns: [path.relative(worktree, filePath)], // 具体模式（文件路径）
+    always: ["*"],                                 // "always approve" 的模式
+    metadata: { filepath, diff },                  // UI 展示信息
+})
+
+// 例：Bash 工具（双重权限请求）
+// 第一次：检查外部目录
+await ctx.ask({ permission: "external_directory", patterns: globs, ... })
+// 第二次：检查命令本身
+await ctx.ask({ permission: "bash", patterns: [...], always: [...], ... })</code></pre>
+
+    <div class="box box-yellow">
+        <strong>两阶段权限控制的价值：</strong><br>
+        <strong>disabled()</strong> 是"静态"过滤 — 如果 Agent 配置了 <code>edit: { *: deny }</code>，
+        那 Edit/Write/ApplyPatch 工具不会出现在 LLM 的工具列表中，LLM 甚至不知道它们的存在。<br>
+        <strong>ctx.ask()</strong> 是"动态"拦截 — 工具执行时根据具体的文件路径/命令内容请求权限，
+        用户可以逐次审批或"always approve"某类操作。
+    </div>
+</div>
+
+<!-- Section 9 -->
+<div class="section" id="s9">
+    <h2>九、Truncation 系统：输出溢出保护</h2>
+    <p>当工具输出超过 <strong>2000 行</strong>或 <strong>50KB</strong> 时，Truncation 系统自动截断并将完整内容持久化到文件：</p>
+
+    <pre><code>// truncation.ts — 截断核心逻辑
+export const MAX_LINES = 2000
+export const MAX_BYTES = 50 * 1024  // 50KB
+
+export async function output(text, options = {}, agent) {
+    const lines = text.split("\n")
+    const totalBytes = Buffer.byteLength(text, "utf-8")
+
+    if (lines.length <= maxLines && totalBytes <= maxBytes) {
+        return { content: text, truncated: false }
+    }
+
+    // 按方向（head/tail）截取
+    // ... 截取逻辑 ...
+
+    // 完整内容持久化到文件
+    const filepath = path.join(DIR, Identifier.ascending("tool"))
+    await Filesystem.write(filepath, text)
+
+    // 根据 Agent 是否有 Task 工具，给出不同的建议
+    const hint = hasTaskTool(agent)
+        ? `Use the Task tool to have explore agent process this file`
+        : `Use Grep to search the full content or Read with offset/limit`
+
+    return { content: `${preview}\n\n...${removed} ${unit} truncated...\n\n${hint}`,
+             truncated: true, outputPath: filepath }
+}</code></pre>
+
+    <h3>9.1 定时清理</h3>
+    <pre><code>// 每小时清理超过 7 天的截断文件
+Scheduler.register({
+    id: "tool.truncation.cleanup",
+    interval: HOUR_MS,
+    run: cleanup,  // 扫描 tool-output/ 目录，删除超过 7 天的文件
+    scope: "global",
+})</code></pre>
+
+    <div class="box box-green">
+        <strong>Truncation 在 Tool.define() 中自动生效。</strong>每个工具的 execute() 返回 output 后，
+        Tool.define 的包装层自动调用 <code>Truncate.output()</code>。
+        工具本身不需要关心截断逻辑（除非它设置 <code>metadata.truncated</code> 表示自己已处理）。
+    </div>
+</div>
+
+<!-- Section 10 -->
+<div class="section" id="s10">
+    <h2>十、Batch 工具：并行执行引擎</h2>
+    <p>Batch 工具（实验性）允许 LLM 在一次调用中并行执行多个工具：</p>
+
+    <pre><code>// batch.ts — 并行执行核心
+const toolCalls = params.tool_calls.slice(0, 25)  // 最多 25 个
+const discardedCalls = params.tool_calls.slice(25) // 超出的标记为错误
+
+// 每个调用独立执行（包含自己的 UI part 状态更新）
+const executeCall = async (call) => {
+    // 1. 检查黑名单（batch 自身不能嵌套）
+    if (DISALLOWED.has(call.tool)) throw new Error(...)
+
+    // 2. 查找工具并校验参数
+    const tool = toolMap.get(call.tool)
+    const validatedParams = tool.parameters.parse(call.parameters)
+
+    // 3. 更新 part 状态为 running
+    await Session.updatePart({ state: { status: "running", ... } })
+
+    // 4. 执行工具
+    const result = await tool.execute(validatedParams, { ...ctx, callID: partID })
+
+    // 5. 更新 part 状态为 completed/error
+    await Session.updatePart({ state: { status: "completed", ... } })
+}
+
+// Promise.all 并行执行所有调用
+const results = await Promise.all(toolCalls.map((call) => executeCall(call)))</code></pre>
+
+    <div class="box box-purple">
+        <strong>Batch 的设计约束：</strong><br>
+        • <strong>DISALLOWED = ["batch"]</strong> — 禁止嵌套 Batch 调用<br>
+        • 每个子调用都有独立的 part 状态追踪（running → completed/error）<br>
+        • 超出 25 个上限的调用直接标记为错误，不会执行<br>
+        • MCP 等外部工具不能 Batch — 只支持注册表内的内置工具
+    </div>
+</div>
+
+<!-- Section 11 -->
+<div class="section" id="s11">
+    <h2>十一、模型适配与 Plugin 扩展</h2>
+
+    <h3>11.1 模型适配：Edit vs ApplyPatch</h3>
+    <pre><code>// registry.ts — 根据模型选择编辑工具
+const usePatch =
+    model.modelID.includes("gpt-") &&
+    !model.modelID.includes("oss") &&
+    !model.modelID.includes("gpt-4")
+
+if (t.id === "apply_patch") return usePatch    // GPT-5 系列用 apply_patch
+if (t.id === "edit" || t.id === "write") return !usePatch  // Claude 等用 edit + write</code></pre>
+
+    <table>
+        <tr><th>模型</th><th>编辑工具</th><th>原因</th></tr>
+        <tr><td>Claude</td><td>edit + write</td><td>Claude 擅长精确字符串匹配</td></tr>
+        <tr><td>GPT-5 系列</td><td>apply_patch</td><td>GPT 更擅长 diff 格式输出</td></tr>
+        <tr><td>GPT-4</td><td>edit + write</td><td>GPT-4 不在此规则内</td></tr>
+        <tr><td>Gemini</td><td>edit + write</td><td>使用标准编辑工具</td></tr>
+    </table>
+
+    <h3>11.2 WebSearch/CodeSearch 的 Provider 限制</h3>
+    <pre><code>// 只有 opencode provider 或启用了 EXA flag 才可用
+if (t.id === "codesearch" || t.id === "websearch") {
+    return model.providerID === "opencode" || Flag.OPENCODE_ENABLE_EXA
+}</code></pre>
+
+    <h3>11.3 Plugin 扩展点</h3>
+    <pre><code>// 插件可以修改工具定义（description、parameters）
+await Plugin.trigger("tool.definition", { toolID: t.id }, output)
+// output.description 和 output.parameters 可被插件修改
+
+// 插件可以注入 shell 环境变量
+const shellEnv = await Plugin.trigger("shell.env", { cwd, sessionID, callID }, { env: {} })
+// 注入的环境变量会合并到 bash 的 process.env
+
+// 插件可以注册自定义工具
+for (const plugin of await Plugin.list()) {
+    for (const [id, def] of Object.entries(plugin.tool ?? {})) {
+        custom.push(fromPlugin(id, def))
+    }
+}</code></pre>
+
+    <div class="box box-cyan">
+        <strong>Plugin 工具的 Truncation 处理：</strong>自定义工具通过 <code>fromPlugin()</code> 适配，
+        执行结果同样经过 <code>Truncate.output()</code> 截断处理，确保不会溢出上下文窗口。
+    </div>
+</div>
+
+<!-- Section 12 -->
+<div class="section" id="s12">
+    <h2>十二、设计优势总结</h2>
+
+    <div class="adv-grid">
+        <div class="adv-card">
+            <div class="icon">🔌</div>
+            <h4>统一接口 + 自动横切</h4>
+            <p>Tool.define() 自动注入 Zod 校验、Truncation 截断、错误格式化。开发者只需关注业务逻辑，声明参数 schema 即可。</p>
+        </div>
+        <div class="adv-card">
+            <div class="icon">🧠</div>
+            <h4>工具即策略</h4>
+            <p>每个工具都解决一个 Harness 问题：Task=上下文隔离，Todo=规划约束，Question=人在回路，Edit=精确修改，Bash=环境安全。</p>
+        </div>
+        <div class="adv-card">
+            <div class="icon">🌳</div>
+            <h4>Tree-sitter 深度解析</h4>
+            <p>Bash 工具不依赖字符串匹配，而是通过 Tree-sitter 解析命令 AST，精确提取子命令、路径参数，确保权限检查无遗漏。</p>
+        </div>
+        <div class="adv-card">
+            <div class="icon">🔄</div>
+            <h4>9 层模糊匹配编辑</h4>
+            <p>从精确匹配到 Levenshtein 相似度、从空白归一化到缩进灵活匹配，逐层降级最大化 LLM 编辑成功率。</p>
+        </div>
+        <div class="adv-card">
+            <div class="icon">🔒</div>
+            <h4>双阶段权限控制</h4>
+            <p>disabled() 在注册阶段过滤全局 deny 的工具（LLM 不可见），ctx.ask() 在执行阶段逐次请求权限（用户可审批/拒绝）。</p>
+        </div>
+        <div class="adv-card">
+            <div class="icon">📦</div>
+            <h4>上下文隔离</h4>
+            <p>Task 工具创建独立子 Session，子 Agent 在自己的上下文中工作。主对话不会因为大量搜索/读取而膨胀。</p>
+        </div>
+        <div class="adv-card">
+            <div class="icon">⚡</div>
+            <h4>Batch 并行引擎</h4>
+            <p>一次调用并行执行最多 25 个工具，每个调用有独立的 UI 状态追踪。禁止嵌套，外部工具不可 batch。</p>
+        </div>
+        <div class="adv-card">
+            <div class="icon">📏</div>
+            <h4>自动溢出保护</h4>
+            <p>Truncation 系统在 Tool.define 层自动生效，2000行/50KB 双重限制。完整输出持久化到文件，7天定时清理。</p>
+        </div>
+        <div class="adv-card">
+            <div class="icon">🎯</div>
+            <h4>模型自适应</h4>
+            <p>GPT-5 系列自动切换 apply_patch，Claude 使用 edit+write。WebSearch/CodeSearch 根据 Provider 条件开放。</p>
+        </div>
+        <div class="adv-card">
+            <div class="icon">🔧</div>
+            <h4>三层扩展体系</h4>
+            <p>内置工具（硬编码）+ 自定义工具（文件系统发现）+ Plugin 工具（插件注入），三种来源统一适配。</p>
+        </div>
+        <div class="adv-card">
+            <div class="icon">🛡️</div>
+            <h4>BashArity 命令字典</h4>
+            <p>160+ 命令的粒度映射，将 "npm run dev --port 3000" 抽象为 "npm run dev *"，让权限记忆既精确又宽泛。</p>
+        </div>
+        <div class="adv-card">
+            <div class="icon">🩺</div>
+            <h4>LSP 诊断闭环</h4>
+            <p>Edit/Write/ApplyPatch 执行后自动触发 LSP 诊断，将编译错误反馈给 Agent，形成"修改→检查→修复"闭环。</p>
+        </div>
+    </div>
+
+    <div class="box box-green" style="margin-top:30px">
+        <strong>一句话总结：</strong>OpenCode 的工具链层是一个"声明式定义 + 自动横切 + 权限双控 + 智能降级"的工具体系。<br>
+        它用 Tool.define() 统一接口抽象、用 9 层 Replacer 最大化编辑成功率、用 Tree-sitter 精确解析命令、<br>
+        用 disabled() + ctx.ask() 实现双阶段权限控制、用 Task 实现上下文隔离、用 Truncation 防止溢出，<br>
+        最终让每个工具都成为 Harness 策略的具体实现 —— 让 Agent 既有能力、又有边界。
+    </div>
+</div>
+
+<div class="footer">
+    OpenCode 工具链层实现原理 — 基于 OpenCode 源码深度分析
+</div>
+
+</div>
+</body>
+</html>

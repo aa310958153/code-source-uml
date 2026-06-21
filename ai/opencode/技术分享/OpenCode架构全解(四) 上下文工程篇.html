@@ -1,0 +1,982 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OpenCode 上下文工程篇 - 技术深度解析</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body { background: #f8fafc; color: #1e293b; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.7; }
+.hero { background: linear-gradient(135deg, #1e293b 0%, #334155 50%, #475569 100%); color: white; padding: 80px 40px; text-align: center; }
+.hero h1 { font-size: 2.8em; margin-bottom: 16px; }
+.hero p { font-size: 1.2em; opacity: 0.9; max-width: 800px; margin: 0 auto; }
+.hero .badge { display: inline-block; background: rgba(255,255,255,0.15); padding: 6px 16px; border-radius: 20px; margin-top: 16px; font-size: 0.9em; }
+.container { max-width: 1100px; margin: 0 auto; padding: 40px 24px; }
+.chapter { margin-bottom: 48px; }
+.chapter h2 { font-size: 1.8em; color: #1e293b; border-left: 4px solid #3b82f6; padding-left: 16px; margin-bottom: 24px; }
+.chapter h3 { font-size: 1.3em; color: #334155; margin: 20px 0 12px; }
+.card { background: white; border-radius: 12px; padding: 28px; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); border: 1px solid #e2e8f0; }
+.card.highlight { border-left: 4px solid #3b82f6; }
+.card.warn { border-left: 4px solid #f59e0b; }
+.card.success { border-left: 4px solid #10b981; }
+.card.danger { border-left: 4px solid #ef4444; }
+pre { background: #1e293b; color: #e2e8f0; padding: 20px; border-radius: 8px; overflow-x: auto; font-size: 0.88em; line-height: 1.6; margin: 12px 0; }
+code { font-family: 'JetBrains Mono', 'Fira Code', Consolas, monospace; }
+.inline-code { background: #f1f5f9; padding: 2px 8px; border-radius: 4px; font-size: 0.9em; color: #be185d; }
+table { width: 100%; border-collapse: collapse; margin: 16px 0; }
+th, td { padding: 12px 16px; text-align: left; border-bottom: 1px solid #e2e8f0; }
+th { background: #f8fafc; font-weight: 600; color: #475569; }
+tr:hover { background: #f8fafc; }
+.tag { display: inline-block; padding: 2px 10px; border-radius: 12px; font-size: 0.78em; font-weight: 600; margin: 2px; }
+.tag-blue { background: #dbeafe; color: #1d4ed8; }
+.tag-green { background: #d1fae5; color: #059669; }
+.tag-amber { background: #fef3c7; color: #d97706; }
+.tag-purple { background: #ede9fe; color: #7c3aed; }
+.tag-red { background: #fee2e2; color: #dc2626; }
+.tag-cyan { background: #cffafe; color: #0891b2; }
+.flow-box { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin: 16px 0; }
+.flow-item { background: white; border: 2px solid #e2e8f0; border-radius: 10px; padding: 10px 18px; font-weight: 600; font-size: 0.9em; }
+.flow-arrow { color: #94a3b8; font-size: 1.4em; }
+svg { max-width: 100%; margin: 16px 0; }
+.toc a:hover { color: var(--primary); text-decoration: underline; }
+.note { background: #eff6ff; border: 1px solid #bfdbfe; padding: 16px; border-radius: 8px; margin: 12px 0; }
+.note strong { color: #1d4ed8; }
+ul, ol { padding-left: 24px; margin: 8px 0; }
+li { margin: 6px 0; }
+.grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+@media (max-width: 768px) { .grid-2 { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+
+<div class="hero">
+  <h1>OpenCode 上下文工程篇</h1>
+  <p>深度解析 OpenCode 如何在每一轮对话中，精密构建 System Prompt、编排工具集、管理消息历史、处理上下文溢出，让 LLM 在正确的时间看到正确的信息</p>
+  <div class="badge">源码版本 2025 | prompt.ts 1972行 | system.ts | llm.ts | compaction.ts | 12个 Prompt 模板</div>
+</div>
+
+<div class="container">
+
+<!-- TOC -->
+<div style="background: white; border: 2px solid #e2e8f0; border-radius: 12px; padding: 24px; margin-bottom: 28px;">
+  <h3 style="color: #2563eb; margin-bottom: 12px; font-size: 1.15em;">📑 目录</h3>
+  <ol style="columns: 2; column-gap: 30px; padding-left: 22px;">
+    <li style="margin: 6px 0;"><a href="#s1" style="color: #1e293b; text-decoration: none;">第一章 核心洞察：什么是上下文工程</a></li>
+    <li style="margin: 6px 0;"><a href="#s2" style="color: #1e293b; text-decoration: none;">第二章 loop() 核心循环 — 上下文工程的心跳</a></li>
+    <li style="margin: 6px 0;"><a href="#s3" style="color: #1e293b; text-decoration: none;">第三章 System Prompt 三层组装架构</a></li>
+    <li style="margin: 6px 0;"><a href="#s4" style="color: #1e293b; text-decoration: none;">第四章 六大 Provider Prompt 模板适配</a></li>
+    <li style="margin: 6px 0;"><a href="#s5" style="color: #1e293b; text-decoration: none;">第五章 Environment 动态环境注入</a></li>
+    <li style="margin: 6px 0;"><a href="#s6" style="color: #1e293b; text-decoration: none;">第六章 Instructions 指令系统 — 用户侧上下文注入</a></li>
+    <li style="margin: 6px 0;"><a href="#s7" style="color: #1e293b; text-decoration: none;">第七章 Reminders 条件提醒注入</a></li>
+    <li style="margin: 6px 0;"><a href="#s8" style="color: #1e293b; text-decoration: none;">第八章 工具集动态解析管线</a></li>
+    <li style="margin: 6px 0;"><a href="#s9" style="color: #1e293b; text-decoration: none;">第九章 消息格式转换 — toModelMessages</a></li>
+    <li style="margin: 6px 0;"><a href="#s10" style="color: #1e293b; text-decoration: none;">第十章 Compaction 上下文压缩机制</a></li>
+    <li style="margin: 6px 0;"><a href="#s11" style="color: #1e293b; text-decoration: none;">第十一章 Plugin Transform — 上下文注入扩展点</a></li>
+    <li style="margin: 6px 0;"><a href="#s12" style="color: #1e293b; text-decoration: none;">第十二章 工具调用修复与兼容性处理</a></li>
+    <li style="margin: 6px 0;"><a href="#s13" style="color: #1e293b; text-decoration: none;">第十三章 完整数据流 — 一次 LLM 调用的全生命周期</a></li>
+    <li style="margin: 6px 0;"><a href="#s14" style="color: #1e293b; text-decoration: none;">第十四章 上下文工程的 12 大设计优势</a></li>
+    <li style="margin: 6px 0;"><a href="#s15" style="color: #1e293b; text-decoration: none;">附录 源码文件索引</a></li>
+  </ol>
+</div>
+
+<!-- ===== 第1章 核心洞察 ===== -->
+<div class="chapter" id="s1">
+  <h2>第一章 核心洞察：什么是上下文工程</h2>
+  <div class="card highlight">
+    <h3>上下文 ≠ 提示词</h3>
+    <p>传统"提示词工程"关注的是<strong>写给模型什么内容</strong>。而 OpenCode 的"上下文工程"关注的是<strong>在每一轮循环迭代中，如何动态组装、过滤、压缩、注入信息</strong>，使模型在正确的时刻看到正确的上下文。</p>
+    <p style="margin-top: 12px;">这包括：System Prompt 分层组装 → 模型适配模板选择 → 工具集动态解析 → 消息历史格式转换 → Reminders 条件注入 → 上下文溢出检测 → Compaction 压缩与裁剪。</p>
+  </div>
+
+  <svg viewBox="0 0 900 160" xmlns="http://www.w3.org/2000/svg">
+    <rect x="10" y="30" width="120" height="50" rx="8" fill="#dbeafe" stroke="#3b82f6" stroke-width="2"/>
+    <text x="70" y="60" text-anchor="middle" font-size="13" font-weight="600" fill="#1e293b">用户输入</text>
+    <line x1="130" y1="55" x2="165" y2="55" stroke="#94a3b8" stroke-width="2" marker-end="url(#arr)"/>
+    <rect x="170" y="20" width="140" height="70" rx="8" fill="#d1fae5" stroke="#10b981" stroke-width="2"/>
+    <text x="240" y="48" text-anchor="middle" font-size="11" font-weight="600" fill="#1e293b">System Prompt</text>
+    <text x="240" y="68" text-anchor="middle" font-size="10" fill="#475569">3层组装+Plugin</text>
+    <line x1="310" y1="55" x2="345" y2="55" stroke="#94a3b8" stroke-width="2" marker-end="url(#arr)"/>
+    <rect x="350" y="20" width="120" height="70" rx="8" fill="#fef3c7" stroke="#f59e0b" stroke-width="2"/>
+    <text x="410" y="48" text-anchor="middle" font-size="11" font-weight="600" fill="#1e293b">工具集解析</text>
+    <text x="410" y="68" text-anchor="middle" font-size="10" fill="#475569">过滤+MCP+Hook</text>
+    <line x1="470" y1="55" x2="505" y2="55" stroke="#94a3b8" stroke-width="2" marker-end="url(#arr)"/>
+    <rect x="510" y="20" width="120" height="70" rx="8" fill="#ede9fe" stroke="#8b5cf6" stroke-width="2"/>
+    <text x="570" y="48" text-anchor="middle" font-size="11" font-weight="600" fill="#1e293b">消息转换</text>
+    <text x="570" y="68" text-anchor="middle" font-size="10" fill="#475569">格式+媒体处理</text>
+    <line x1="630" y1="55" x2="665" y2="55" stroke="#94a3b8" stroke-width="2" marker-end="url(#arr)"/>
+    <rect x="670" y="20" width="110" height="70" rx="8" fill="#fee2e2" stroke="#ef4444" stroke-width="2"/>
+    <text x="725" y="48" text-anchor="middle" font-size="11" font-weight="600" fill="#1e293b">LLM 调用</text>
+    <text x="725" y="68" text-anchor="middle" font-size="10" fill="#475569">streamText</text>
+    <line x1="780" y1="55" x2="810" y2="55" stroke="#94a3b8" stroke-width="2" marker-end="url(#arr)"/>
+    <rect x="815" y="30" width="75" height="50" rx="8" fill="#cffafe" stroke="#0891b2" stroke-width="2"/>
+    <text x="852" y="60" text-anchor="middle" font-size="11" font-weight="600" fill="#1e293b">结果</text>
+    <text x="450" y="130" text-anchor="middle" font-size="11" fill="#64748b">每轮 loop() 迭代都在重复这个完整的上下文构建流程</text>
+    <defs><marker id="arr" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#94a3b8"/></marker></defs>
+  </svg>
+</div>
+
+<!-- ===== 第2章 loop() 核心循环 ===== -->
+<div class="chapter" id="s2">
+  <h2>第二章 loop() 核心循环 — 上下文工程的心跳</h2>
+  <div class="card">
+    <p><span class="inline-code">prompt.ts</span> 的 <span class="inline-code">loop()</span> 函数是整个上下文工程的引擎。它是一个 <code>while(true)</code> 无限循环，每一轮迭代代表一次完整的 LLM 交互。</p>
+    <pre><code>// prompt.ts - loop() 核心骨架 (简化)
+let step = 0
+while (true) {
+    if (abort.aborted) break
+    
+    // 1. 消息流过滤 — 获取压缩后的消息历史
+    let msgs = await MessageV2.filterCompacted(MessageV2.stream(sessionID))
+    
+    // 2. 回溯查找关键消息
+    //    lastUser: 最近的用户消息
+    //    lastAssistant: 最近的助手消息
+    //    lastFinished: 最近完成(非tool-calls)的助手消息
+    //    tasks: 待处理的 subtask/compaction 任务
+    
+    // 3. 退出条件判断
+    if (lastAssistant?.finish && !["tool-calls","unknown"].includes(lastAssistant.finish)
+        && lastUser.id &lt; lastAssistant.id) break
+    
+    step++
+    
+    // 4. 处理待执行任务 (subtask → compaction)
+    if (task?.type === "subtask") { /* 执行 TaskTool */ continue }
+    if (task?.type === "compaction") { /* 执行压缩 */ continue }
+    
+    // 5. 上下文溢出检测 → 触发 Compaction
+    if (lastFinished && await SessionCompaction.isOverflow({tokens, model})) {
+        await SessionCompaction.create({sessionID, auto: true})
+        continue
+    }
+    
+    // 6. 正常处理流程
+    msgs = await insertReminders({messages, agent, session})  // 注入提醒
+    const tools = await resolveTools({agent, model, ...})     // 解析工具集
+    const system = [...environment(), ...instructions()]       // 构建 System Prompt
+    
+    // 7. step > 1 时包装用户消息队列
+    if (step > 1) { /* 包装为 system-reminder */ }
+    
+    // 8. 调用 LLM
+    const result = await processor.process({
+        system, messages: toModelMessages(msgs, model), tools, model
+    })
+    
+    // 9. 结果判断: stop → break | compact → 触发压缩 | continue → 下一轮
+}</code></pre>
+  </div>
+
+  <div class="card warn">
+    <h3>循环退出的 5 种方式</h3>
+    <table>
+      <tr><th>条件</th><th>触发</th><th>说明</th></tr>
+      <tr><td>abort.aborted</td><td>用户取消</td><td>立即 break</td></tr>
+      <tr><td>模型完成</td><td>finish ≠ "tool-calls"且 ≠ "unknown"</td><td>模型主动结束（stop/end_turn）</td></tr>
+      <tr><td>structuredOutput</td><td>JSON Schema 模式捕获到输出</td><td>StructuredOutput 工具被调用</td></tr>
+      <tr><td>maxSteps</td><td>step >= agent.steps</td><td>注入 MAX_STEPS 消息，禁止工具调用</td></tr>
+      <tr><td>compaction stop</td><td>压缩失败/overflow</td><td>context_overflow 无法恢复</td></tr>
+    </table>
+  </div>
+</div>
+
+<!-- ===== 第3章 System Prompt 三层组装 ===== -->
+<div class="chapter" id="s3">
+  <h2>第三章 System Prompt 三层组装架构</h2>
+  <div class="card highlight">
+    <p>System Prompt 不是静态文本，而是由 <span class="inline-code">llm.ts stream()</span> 函数在每次 LLM 调用时<strong>动态组装</strong>的三层结构：</p>
+    <pre><code>// llm.ts - stream() 中 System Prompt 组装
+const system = []
+system.push(
+    [
+        // 第一层：Agent Prompt 或 Provider Prompt（二选一）
+        ...(input.agent.prompt
+            ? [input.agent.prompt]
+            : isCodex ? [] : SystemPrompt.provider(input.model)),
+        
+        // 第二层：Environment + Instructions（外部传入的 system 数组）
+        ...input.system,
+        
+        // 第三层：用户消息级别的自定义 system
+        ...(input.user.system ? [input.user.system] : []),
+    ]
+    .filter((x) => x)
+    .join("\n")
+)</code></pre>
+  </div>
+
+  <svg viewBox="0 0 900 220" xmlns="http://www.w3.org/2000/svg">
+    <rect x="50" y="10" width="800" height="45" rx="8" fill="#dbeafe" stroke="#3b82f6" stroke-width="2"/>
+    <text x="450" y="38" text-anchor="middle" font-size="14" font-weight="700" fill="#1e293b">第一层：Agent Prompt / Provider Prompt</text>
+    <text x="450" y="52" text-anchor="middle" font-size="10" fill="#475569">agent.prompt 优先 → 否则按模型选择 anthropic/beast/codex/gemini/trinity/qwen</text>
+    <line x1="450" y1="55" x2="450" y2="70" stroke="#94a3b8" stroke-width="2" marker-end="url(#arr)"/>
+    <rect x="50" y="75" width="800" height="45" rx="8" fill="#d1fae5" stroke="#10b981" stroke-width="2"/>
+    <text x="450" y="103" text-anchor="middle" font-size="14" font-weight="700" fill="#1e293b">第二层：Environment + Instructions</text>
+    <text x="450" y="115" text-anchor="middle" font-size="10" fill="#475569">environment(): 模型名/工作目录/Git状态/平台/日期 | instructions(): AGENTS.md/CLAUDE.md/自定义指令</text>
+    <line x1="450" y1="120" x2="450" y2="135" stroke="#94a3b8" stroke-width="2" marker-end="url(#arr)"/>
+    <rect x="50" y="140" width="800" height="35" rx="8" fill="#fef3c7" stroke="#f59e0b" stroke-width="2"/>
+    <text x="450" y="163" text-anchor="middle" font-size="14" font-weight="700" fill="#1e293b">第三层：user.system（用户自定义 System Prompt）</text>
+    <line x1="450" y1="175" x2="450" y2="190" stroke="#94a3b8" stroke-width="2" marker-end="url(#arr)"/>
+    <rect x="200" y="195" width="500" height="25" rx="6" fill="#ede9fe" stroke="#8b5cf6" stroke-width="1.5"/>
+    <text x="450" y="213" text-anchor="middle" font-size="12" font-weight="600" fill="#7c3aed">→ Plugin: experimental.chat.system.transform ←</text>
+    <defs><marker id="arr" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#94a3b8"/></marker></defs>
+  </svg>
+
+  <div class="card success">
+    <h3>Prompt Caching 优化</h3>
+    <p>组装完成后，OpenCode 会检测 System Prompt 的 header 部分是否变化。如果 header 未变（仅尾部 Instructions 变化），则将 System 拆分为 <code>[header, rest]</code> 两段，让 LLM Provider 可以缓存 header 的 KV-cache，大幅减少重复计算。</p>
+    <pre><code>// llm.ts - Prompt Caching 逻辑
+const header = system[0]
+await Plugin.trigger("experimental.chat.system.transform", {...}, {system})
+
+// 如果 header 未变，重组为 2 段结构
+if (system.length > 2 && system[0] === header) {
+    const rest = system.slice(1)
+    system.length = 0
+    system.push(header, rest.join("\n"))
+}</code></pre>
+  </div>
+</div>
+
+<!-- ===== 第4章 Provider Prompt 适配 ===== -->
+<div class="chapter" id="s4">
+  <h2>第四章 六大 Provider Prompt 模板适配</h2>
+  <div class="card">
+    <p><span class="inline-code">SystemPrompt.provider(model)</span> 根据模型 ID 选择最适合的 prompt 模板。每种模型家族有独立的 prompt 风格和工作流设计。</p>
+    <table>
+      <tr><th>模型匹配规则</th><th>模板文件</th><th>行数</th><th>核心特征</th></tr>
+      <tr>
+        <td><code>gpt-5*</code></td>
+        <td><span class="tag tag-green">codex_header.txt</span></td>
+        <td>80行</td>
+        <td>编辑约束(ASCII优先) + apply_patch偏好 + Git卫生 + 前端设计指南 + 最终消息格式规范</td>
+      </tr>
+      <tr>
+        <td><code>gpt-*/o1/o3</code></td>
+        <td><span class="tag tag-blue">beast.txt</span></td>
+        <td>148行</td>
+        <td>"自主Agent"模式 + 10步工作流 + 强制WebFetch递归研究 + 不完成不停止</td>
+      </tr>
+      <tr>
+        <td><code>gemini-*</code></td>
+        <td><span class="tag tag-cyan">gemini.txt</span></td>
+        <td>156行</td>
+        <td>CLI Agent风格 + 5步工程工作流 + 详细示例 + 路径构建指南 + 安全规则</td>
+      </tr>
+      <tr>
+        <td><code>claude*</code></td>
+        <td><span class="tag tag-purple">anthropic.txt</span></td>
+        <td>106行</td>
+        <td>"最好的Coding Agent" + TodoWrite使用示例 + 工具使用策略 + 代码引用格式</td>
+      </tr>
+      <tr>
+        <td><code>*trinity*</code></td>
+        <td><span class="tag tag-amber">trinity.txt</span></td>
+        <td>98行</td>
+        <td>极简输出(4行以内) + 代码风格约束(无注释) + 单工具/消息策略</td>
+      </tr>
+      <tr>
+        <td>其他模型（兜底）</td>
+        <td><span class="tag tag-red">qwen.txt</span></td>
+        <td>110行</td>
+        <td>类似trinity但增加安全约束 + 并行工具调用 + 恶意代码拒绝</td>
+      </tr>
+    </table>
+  </div>
+
+  <div class="card warn">
+    <h3>Codex 特殊路径</h3>
+    <p>当使用 OpenAI OAuth（Codex）时，<code>SystemPrompt.provider()</code> 被跳过（因为通过 <code>options.instructions</code> 发送），而 <code>SystemPrompt.instructions()</code> 返回 <code>codex_header.txt</code> 内容作为独立 instructions 字段。</p>
+    <pre><code>// system.ts
+export function instructions() {
+    return PROMPT_CODEX.trim()  // codex_header.txt
+}
+
+// llm.ts
+if (isCodex) {
+    options.instructions = SystemPrompt.instructions()
+}
+
+// provider() 中跳过
+...(input.agent.prompt ? [input.agent.prompt] : isCodex ? [] : SystemPrompt.provider(input.model))</code></pre>
+  </div>
+
+  <div class="grid-2">
+    <div class="card">
+      <h3>Claude (anthropic.txt) 精华</h3>
+      <ul>
+        <li><strong>身份定位</strong>："OpenCode, the best coding agent on the planet"</li>
+        <li><strong>TodoWrite 深度使用</strong>：提供 2 个完整示例（修复类型错误、新功能开发）</li>
+        <li><strong>工具策略</strong>：Task > 直接搜索；WebFetch 重定向自动跟随；并行工具调用</li>
+        <li><strong>专业客观性</strong>：技术准确优先于迎合用户</li>
+        <li><strong>代码引用</strong>：file_path:line_number 格式</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>Beast (beast.txt) 精华</h3>
+      <ul>
+        <li><strong>Agent 强制</strong>："You MUST iterate until problem is solved"</li>
+        <li><strong>WebFetch 递归</strong>：强制搜索 Google + 递归抓取链接</li>
+        <li><strong>10步工作流</strong>：Fetch → 理解 → 调查 → 研究 → 计划 → 实现 → 调试 → 测试 → 迭代 → 验证</li>
+        <li><strong>记忆系统</strong>：.github/instructions/memory.instruction.md</li>
+        <li><strong>禁止重复读取</strong>：已读文件不再重读</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>Codex (codex_header.txt) 精华</h3>
+      <ul>
+        <li><strong>编辑约束</strong>：默认 ASCII；优先 apply_patch</li>
+        <li><strong>工具使用</strong>：专用工具优于 Shell</li>
+        <li><strong>Git 卫生</strong>：不撤销用户改动；不 amend commit</li>
+        <li><strong>前端指南</strong>：避免通用布局；定义 CSS 变量；有意义的动画</li>
+        <li><strong>输出格式</strong>：纯文本 + 标题用 **bold** + 短横线列表</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>Gemini (gemini.txt) 精华</h3>
+      <ul>
+        <li><strong>5步工程流</strong>：理解 → 计划 → 实现 → 验证(测试) → 验证(标准)</li>
+        <li><strong>路径构建</strong>：强制绝对路径 = 项目根 + 相对路径</li>
+        <li><strong>新应用工作流</strong>：6步从需求到原型</li>
+        <li><strong>安全规则</strong>：修改命令必须解释目的</li>
+        <li><strong>丰富示例</strong>：7 个完整对话示例</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<!-- ===== 第5章 Environment 环境注入 ===== -->
+<div class="chapter" id="s5">
+  <h2>第五章 Environment 动态环境注入</h2>
+  <div class="card highlight">
+    <p><span class="inline-code">SystemPrompt.environment(model)</span> 在每次调用时动态注入运行时环境信息，让模型感知当前上下文。</p>
+    <pre><code>// system.ts - environment() 函数
+export async function environment(model: Provider.Model) {
+    const project = Instance.project
+    return [
+        [
+            `You are powered by the model named ${model.api.id}.
+             The exact model ID is ${model.providerID}/${model.api.id}`,
+            `Here is some useful information about the environment:`,
+            `&lt;env&gt;`,
+            `  Working directory: ${Instance.directory}`,
+            `  Is directory a git repo: ${project.vcs === "git" ? "yes" : "no"}`,
+            `  Platform: ${process.platform}`,
+            `  Today's date: ${new Date().toDateString()}`,
+            `&lt;/env&gt;`,
+            `&lt;directories&gt;`,
+            `  ${/* 项目目录树（当前已禁用） */}`,
+            `&lt;/directories&gt;`,
+        ].join("\n"),
+    ]
+}</code></pre>
+    <div class="note">
+      <strong>注入的信息：</strong>模型名称和精确ID → 工作目录路径 → Git 仓库状态 → 操作系统平台 → 当前日期。这些信息让模型能够根据环境调整行为（如在 Windows 上使用不同的路径格式）。
+    </div>
+  </div>
+</div>
+
+<!-- ===== 第6章 Instructions 指令系统 ===== -->
+<div class="chapter" id="s6">
+  <h2>第六章 Instructions 指令系统 — 用户侧上下文注入</h2>
+  <div class="card">
+    <p><span class="inline-code">InstructionPrompt.system()</span> 从多个来源加载用户/项目级指令，作为 System Prompt 的第二层注入。</p>
+    <pre><code>// instruction.ts - 指令来源优先级
+const FILES = [
+    "AGENTS.md",    // OpenCode 标准配置文件
+    "CLAUDE.md",    // Claude Code 兼容配置
+    "CONTEXT.md",   // 已弃用
+]
+
+// 加载顺序：
+// 1. 项目级：从 Instance.directory 向上查找到 worktree
+//    → AGENTS.md > CLAUDE.md > CONTEXT.md（找到即停）
+// 2. 全局级：
+//    → $OPENCODE_CONFIG_DIR/AGENTS.md
+//    → ~/.config/opencode/AGENTS.md
+//    → ~/.claude/CLAUDE.md（兼容模式）
+// 3. 自定义：config.instructions 配置项
+//    → 本地路径（支持 ~ 和相对路径，向上查找）
+//    → URL（HTTP fetch，5秒超时）</code></pre>
+  </div>
+
+  <div class="card success">
+    <h3>目录级 Instructions 自动发现</h3>
+    <p>当 Read 工具读取文件时，<span class="inline-code">InstructionPrompt.resolve()</span> 会自动查找该文件所在目录及所有父目录中的 AGENTS.md/CLAUDE.md，将其注入为工具输出的附加上下文。这实现了<strong>"读什么文件就看到什么规范"</strong>的智能上下文关联。</p>
+    <pre><code>// instruction.ts - resolve() 目录级指令发现
+export async function resolve(messages, filepath, messageID) {
+    let current = path.dirname(target)
+    while (current.startsWith(root) && current !== root) {
+        const found = await find(current)  // 查找 AGENTS.md / CLAUDE.md
+        if (found && !system.has(found) && !already.has(found)) {
+            claim(messageID, found)  // 标记已加载，避免重复
+            results.push({filepath: found, content: "Instructions from: " + found + "\n" + content})
+        }
+        current = path.dirname(current)  // 向上遍历
+    }
+}</code></pre>
+  </div>
+</div>
+
+<!-- ===== 第7章 Reminders 条件注入 ===== -->
+<div class="chapter" id="s7">
+  <h2>第七章 Reminders 条件提醒注入</h2>
+  <div class="card">
+    <p><span class="inline-code">insertReminders()</span> 根据当前 Agent 模式和会话状态，向用户消息中动态注入特殊的 system-reminder 文本块。</p>
+
+    <h3>7.1 Plan 模式注入 (plan.txt)</h3>
+    <div class="card danger">
+      <p>当 Agent 名称为 "plan" 时，注入<strong>只读约束</strong>，禁止一切文件修改操作：</p>
+      <pre><code>// plan.txt - 核心约束（翻译）
+&lt;system-reminder&gt;
+# 计划模式 - 系统提醒
+
+严重警告：计划模式已激活 - 你处于只读阶段。
+严格禁止：任何文件编辑、修改或系统变更。
+不得使用 sed、tee、echo、cat 或任何 bash 命令来操作文件。
+命令只能读取/检查。
+此绝对约束覆盖所有其他指令，包括用户的直接编辑请求。
+你只能观察、分析和规划。任何修改尝试都是严重违规。
+零例外。
+&lt;/system-reminder&gt;</code></pre>
+    </div>
+
+    <h3>7.2 Plan → Build 模式切换 (build-switch.txt)</h3>
+    <div class="card success">
+      <p>当从 plan agent 切换到 build agent 时，注入模式切换通知：</p>
+      <pre><code>// build-switch.txt（翻译）
+&lt;system-reminder&gt;
+你的操作模式已从计划切换为构建。
+你不再处于只读模式。
+你可以进行文件更改、运行 Shell 命令，并根据需要使用你的工具库。
+&lt;/system-reminder&gt;</code></pre>
+      <p>实验性 Plan 模式下还会附加 Plan 文件路径和完整 Plan Workflow（5阶段：理解 → 设计 → 审查 → 最终计划 → 退出计划模式）。</p>
+    </div>
+
+    <h3>7.3 Max Steps 注入 (max-steps.txt)</h3>
+    <div class="card warn">
+      <p>当 <code>step >= agent.steps</code> 时，作为 assistant 消息注入到消息末尾，<strong>禁止一切工具调用</strong>：</p>
+      <pre><code>// max-steps.txt（翻译）
+严重警告 - 已达到最大步骤数
+
+此任务允许的最大步骤数已达到。工具已禁用，直到下一次用户输入。
+仅以文本回复。
+
+严格要求：
+1. 不得进行任何工具调用（不读取、不写入、不编辑、不搜索）
+2. 必须提供文本回复，总结已完成的工作
+3. 此约束覆盖所有其他指令
+
+回复必须包含：
+- 声明已达到此 Agent 的最大步骤
+- 总结目前完成的工作
+- 列出未完成的剩余任务
+- 下一步建议</code></pre>
+    </div>
+
+    <h3>7.4 用户消息队列包装</h3>
+    <div class="card">
+      <p>当 <code>step > 1</code>（即循环进入多轮迭代）时，如果用户在 LLM 执行期间发送了新消息，这些消息会被包装为 <code>&lt;system-reminder&gt;</code> 格式，防止模型将其视为新的独立请求：</p>
+      <pre><code>// prompt.ts - step > 1 时的消息包装
+if (step > 1 && lastFinished) {
+    for (const msg of msgs) {
+        if (msg.info.role !== "user" || msg.info.id &lt;= lastFinished.id) continue
+        for (const part of msg.parts) {
+            if (part.type !== "text" || part.ignored || part.synthetic) continue
+            part.text = [
+                "&lt;system-reminder&gt;",
+                "The user sent the following message:",
+                part.text,
+                "",
+                "Please address this message and continue with your tasks.",
+                "&lt;/system-reminder&gt;",
+            ].join("\n")
+        }
+    }
+}</code></pre>
+    </div>
+  </div>
+</div>
+
+<!-- ===== 第8章 工具集动态解析 ===== -->
+<div class="chapter" id="s8">
+  <h2>第八章 工具集动态解析管线</h2>
+  <div class="card highlight">
+    <p><span class="inline-code">resolveTools()</span> 在每轮循环中动态构建工具集，经过多阶段过滤和增强：</p>
+
+    <svg viewBox="0 0 900 260" xmlns="http://www.w3.org/2000/svg">
+      <rect x="50" y="10" width="180" height="40" rx="8" fill="#dbeafe" stroke="#3b82f6" stroke-width="2"/>
+      <text x="140" y="35" text-anchor="middle" font-size="12" font-weight="600" fill="#1e293b">① ToolRegistry.tools()</text>
+      <line x1="140" y1="50" x2="140" y2="70" stroke="#94a3b8" stroke-width="2" marker-end="url(#arr)"/>
+      <rect x="50" y="75" width="180" height="40" rx="8" fill="#d1fae5" stroke="#10b981" stroke-width="2"/>
+      <text x="140" y="100" text-anchor="middle" font-size="12" font-weight="600" fill="#1e293b">② ProviderTransform.schema</text>
+      <line x1="140" y1="115" x2="140" y2="135" stroke="#94a3b8" stroke-width="2" marker-end="url(#arr)"/>
+      <rect x="50" y="140" width="180" height="40" rx="8" fill="#fef3c7" stroke="#f59e0b" stroke-width="2"/>
+      <text x="140" y="165" text-anchor="middle" font-size="12" font-weight="600" fill="#1e293b">③ Plugin: tool.definition</text>
+      <line x1="230" y1="160" x2="290" y2="160" stroke="#94a3b8" stroke-width="2" marker-end="url(#arr)"/>
+      <rect x="295" y="140" width="180" height="40" rx="8" fill="#ede9fe" stroke="#8b5cf6" stroke-width="2"/>
+      <text x="385" y="165" text-anchor="middle" font-size="12" font-weight="600" fill="#1e293b">④ MCP.tools() 合并</text>
+      <line x1="475" y1="160" x2="535" y2="160" stroke="#94a3b8" stroke-width="2" marker-end="url(#arr)"/>
+      <rect x="540" y="140" width="180" height="40" rx="8" fill="#fee2e2" stroke="#ef4444" stroke-width="2"/>
+      <text x="630" y="165" text-anchor="middle" font-size="12" font-weight="600" fill="#1e293b">⑤ LLM disabled() 过滤</text>
+      <line x1="630" y1="180" x2="630" y2="200" stroke="#94a3b8" stroke-width="2" marker-end="url(#arr)"/>
+      <rect x="540" y="205" width="180" height="40" rx="8" fill="#cffafe" stroke="#0891b2" stroke-width="2"/>
+      <text x="630" y="230" text-anchor="middle" font-size="12" font-weight="600" fill="#1e293b">⑥ 最终工具集 → LLM</text>
+      <defs><marker id="arr" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#94a3b8"/></marker></defs>
+    </svg>
+
+    <pre><code>// prompt.ts - resolveTools() 完整管线
+async function resolveTools(input) {
+    const tools = {}
+    
+    // 阶段①：内置 + 自定义 + Plugin 工具（已经模型适配过滤）
+    for (const item of await ToolRegistry.tools({modelID, providerID}, agent)) {
+        // 阶段②：Schema 转换（适配不同 Provider 的 JSON Schema 方言）
+        const schema = ProviderTransform.schema(model, z.toJSONSchema(item.parameters))
+        
+        // 包装工具执行：添加 Plugin hooks + 权限请求 + 元数据更新
+        tools[item.id] = tool({
+            description: item.description,
+            inputSchema: jsonSchema(schema),
+            async execute(args, options) {
+                const ctx = context(args, options)
+                await Plugin.trigger("tool.execute.before", {...}, {args})
+                const result = await item.execute(args, ctx)
+                await Plugin.trigger("tool.execute.after", {...}, result)
+                return result
+            },
+        })
+    }
+    
+    // 阶段④：合并 MCP 工具
+    for (const [key, item] of Object.entries(await MCP.tools())) {
+        item.inputSchema = jsonSchema(ProviderTransform.schema(model, schema))
+        item.execute = async (args, opts) => {
+            await ctx.ask({permission: key, ...})  // MCP 工具权限请求
+            const result = await execute(args, opts)
+            const truncated = await Truncate.output(textParts.join("\n\n"), {}, agent)
+            return { output: truncated.content, ... }
+        }
+        tools[key] = item
+    }
+    return tools
+}
+
+// llm.ts - 阶段⑤：LLM 层面的权限过滤
+async function resolveTools(input) {
+    const disabled = PermissionNext.disabled(Object.keys(input.tools), input.agent.permission)
+    for (const tool of Object.keys(input.tools)) {
+        if (input.user.tools?.[tool] === false || disabled.has(tool)) {
+            delete input.tools[tool]  // 全局 deny 的工具直接移除
+        }
+    }
+    return input.tools
+}</code></pre>
+  </div>
+</div>
+
+<!-- ===== 第9章 消息格式转换 ===== -->
+<div class="chapter" id="s9">
+  <h2>第九章 消息格式转换 — toModelMessages</h2>
+  <div class="card">
+    <p><span class="inline-code">MessageV2.toModelMessages()</span> 将内部的 WithParts[] 消息结构转换为 AI SDK 的 ModelMessage[] 格式。这是连接 OpenCode 持久化层和 LLM API 的桥梁。</p>
+
+    <h3>用户消息转换</h3>
+    <pre><code>// 用户消息：TextPart → text part | FilePart → file/media part | Compaction → "What did we do so far?"
+if (msg.info.role === "user") {
+    for (const part of msg.parts) {
+        if (part.type === "text" && !part.ignored)
+            userMessage.parts.push({ type: "text", text: part.text })
+        if (part.type === "file" && part.mime !== "text/plain")
+            userMessage.parts.push({ type: "file", url: part.url, mediaType: part.mime })
+        if (part.type === "compaction")
+            userMessage.parts.push({ type: "text", text: "What did we do so far?" })
+        if (part.type === "subtask")
+            userMessage.parts.push({ type: "text", text: "The following tool was executed by the user" })
+    }
+}</code></pre>
+
+    <h3>助手消息转换</h3>
+    <pre><code>// 助手消息：TextPart → text | ToolPart → tool-{name} | ReasoningPart → reasoning
+if (msg.info.role === "assistant") {
+    for (const part of msg.parts) {
+        if (part.type === "text")
+            assistantMessage.parts.push({ type: "text", text: part.text })
+        if (part.type === "tool") {
+            if (part.state.status === "completed") {
+                const outputText = part.state.time.compacted
+                    ? "[Old tool result content cleared]"  // 被裁剪的旧工具输出
+                    : part.state.output
+                assistantMessage.parts.push({
+                    type: "tool-" + part.tool,
+                    state: "output-available",
+                    toolCallId: part.callID,
+                    input: part.state.input,
+                    output: outputWithAttachments,
+                })
+            }
+            if (part.state.status === "pending" || part.state.status === "running")
+                // 防止悬挂的 tool_use 块（Anthropic API 要求每个 tool_use 有 tool_result）
+                assistantMessage.parts.push({
+                    type: "tool-" + part.tool,
+                    state: "output-error",
+                    errorText: "[Tool execution was interrupted]",
+                })
+        }
+    }
+}</code></pre>
+  </div>
+
+  <div class="card warn">
+    <h3>媒体附件兼容性处理</h3>
+    <p>不同 Provider 对工具结果中的媒体附件支持不同。OpenCode 检测 Provider 类型，对不支持的 Provider 将媒体提取为独立 user 消息：</p>
+    <pre><code>// 支持的 Provider：直接在 tool result 中包含媒体
+const supportsMediaInToolResults = (() => {
+    if (model.api.npm === "@ai-sdk/anthropic") return true
+    if (model.api.npm === "@ai-sdk/openai") return true
+    if (model.api.npm === "@ai-sdk/amazon-bedrock") return true
+    if (model.api.npm === "@ai-sdk/google") {
+        return id.includes("gemini-3") && !id.includes("gemini-2")
+    }
+    return false
+})()
+
+// 不支持的 Provider：提取媒体 → 独立 user 消息
+if (!supportsMediaInToolResults && mediaAttachments.length > 0) {
+    result.push({
+        role: "user",
+        parts: [
+            { type: "text", text: "Attached image(s) from tool result:" },
+            ...media.map(a => ({ type: "file", url: a.url, mediaType: a.mime })),
+        ],
+    })
+}</code></pre>
+  </div>
+</div>
+
+<!-- ===== 第10章 Compaction ===== -->
+<div class="chapter" id="s10">
+  <h2>第十章 Compaction 上下文压缩机制</h2>
+  <div class="card highlight">
+    <h3>10.1 溢出检测 — isOverflow()</h3>
+    <pre><code>// compaction.ts - isOverflow()
+export async function isOverflow(input) {
+    const config = await Config.get()
+    if (config.compaction?.auto === false) return false  // 可禁用
+    
+    const context = input.model.limit.context
+    if (context === 0) return false  // 无限制的模型不压缩
+    
+    const count = input.tokens.total
+        || input.tokens.input + input.tokens.output
+           + input.tokens.cache.read + input.tokens.cache.write
+    
+    const reserved = config.compaction?.reserved
+        ?? Math.min(COMPACTION_BUFFER, maxOutputTokens)  // 默认 20000
+    
+    const usable = input.model.limit.input
+        ? input.model.limit.input - reserved
+        : context - maxOutputTokens
+    
+    return count >= usable  // 达到可用上限则触发
+}</code></pre>
+  </div>
+
+  <div class="card">
+    <h3>10.2 压缩过程 — process()</h3>
+    <p>压缩使用独立的 "compaction" Agent，通过 LLM 生成结构化摘要：</p>
+    <pre><code>// compaction.ts - 摘要生成模板
+const defaultPrompt = `Provide a detailed prompt for continuing our conversation above.
+Focus on information that would be helpful for continuing the conversation.
+
+## Goal
+[What goal(s) is the user trying to accomplish?]
+
+## Instructions
+- [What important instructions did the user give you]
+- [If there is a plan or spec, include information about it]
+
+## Discoveries
+[What notable things were learned during this conversation]
+
+## Accomplished
+[What work has been completed, what is in progress, what is left?]
+
+## Relevant files / directories
+[Structured list of relevant files]`</code></pre>
+
+    <h3>压缩后的自动继续</h3>
+    <p>压缩完成后，根据情况创建"继续消息"：</p>
+    <ul>
+      <li><strong>有 replay 消息</strong>：找到压缩前的最后用户消息，重新播放（去除媒体附件）</li>
+      <li><strong>无 replay</strong>：创建合成用户消息 "Continue if you have next steps, or stop and ask for clarification"</li>
+      <li><strong>overflow 模式</strong>：额外注入说明 "The previous request exceeded the provider's size limit due to large media attachments"</li>
+    </ul>
+  </div>
+
+  <div class="card success">
+    <h3>10.3 Prune 裁剪 — 旧工具输出清理</h3>
+    <pre><code>// compaction.ts - prune() 策略
+const PRUNE_MINIMUM = 20_000   // 最少要裁剪 20K token
+const PRUNE_PROTECT = 40_000   // 保护最近 40K token 不被裁剪
+const PRUNE_PROTECTED_TOOLS = ["skill"]  // skill 工具永不清理
+
+// 算法：从后往前遍历消息
+// 1. 跳过最近 2 轮对话（turns &lt; 2）
+// 2. 遇到之前的 summary 消息则停止
+// 3. 累计工具输出的 token 数
+// 4. 超过 PRUNE_PROTECT (40K) 后的工具输出标记为待裁剪
+// 5. 如果总裁剪量 > PRUNE_MINIMUM (20K)，执行裁剪
+
+// 裁剪方式：标记 time.compacted = Date.now()
+// 在 toModelMessages 中，compacted 的工具输出显示为：
+// "[Old tool result content cleared]"</code></pre>
+  </div>
+</div>
+
+<!-- ===== 第11章 Plugin Transform ===== -->
+<div class="chapter" id="s11">
+  <h2>第十一章 Plugin Transform — 上下文注入扩展点</h2>
+  <div class="card">
+    <p>OpenCode 的 Plugin 系统在上下文构建的多个关键节点提供 transform 钩子：</p>
+    <table>
+      <tr><th>Plugin 事件</th><th>触发时机</th><th>可修改内容</th></tr>
+      <tr>
+        <td><span class="tag tag-purple">experimental.chat.system.transform</span></td>
+        <td>System Prompt 组装后</td>
+        <td>system[] 数组 — 可注入/替换/删除 System Prompt 段落</td>
+      </tr>
+      <tr>
+        <td><span class="tag tag-blue">experimental.chat.messages.transform</span></td>
+        <td>消息转换前</td>
+        <td>messages[] — 可修改消息历史</td>
+      </tr>
+      <tr>
+        <td><span class="tag tag-green">tool.definition</span></td>
+        <td>工具注册时</td>
+        <td>工具的 description — 可动态修改工具描述</td>
+      </tr>
+      <tr>
+        <td><span class="tag tag-amber">tool.execute.before / after</span></td>
+        <td>工具执行前后</td>
+        <td>args — 可修改工具参数或拦截结果</td>
+      </tr>
+      <tr>
+        <td><span class="tag tag-cyan">chat.params</span></td>
+        <td>LLM 调用前</td>
+        <td>temperature / topP / topK / options</td>
+      </tr>
+      <tr>
+        <td><span class="tag tag-red">experimental.session.compacting</span></td>
+        <td>Compaction 触发时</td>
+        <td>context[] / prompt — 可替换压缩提示词</td>
+      </tr>
+    </table>
+
+    <pre><code>// llm.ts - Plugin transform 示例
+// 1. System Prompt Transform
+await Plugin.trigger(
+    "experimental.chat.system.transform",
+    {sessionID, model},
+    {system}  // ← 可修改的 system 数组引用
+)
+
+// 2. Messages Transform (prompt.ts)
+await Plugin.trigger(
+    "experimental.chat.messages.transform",
+    {},
+    {messages: msgs}  // ← 可修改的消息数组引用
+)
+
+// 3. Compaction Prompt 替换
+const compacting = await Plugin.trigger(
+    "experimental.session.compacting",
+    {sessionID},
+    {context: [], prompt: undefined}  // ← 可注入上下文或替换提示词
+)</code></pre>
+  </div>
+</div>
+
+<!-- ===== 第12章 工具修复与兼容 ===== -->
+<div class="chapter" id="s12">
+  <h2>第十二章 工具调用修复与兼容性处理</h2>
+  <div class="card">
+    <h3>12.1 experimental_repairToolCall — 工具名修复</h3>
+    <p>当 LLM 返回的工具名有误时，AI SDK 的 repair 机制尝试修复：</p>
+    <pre><code>// llm.ts - 工具调用修复策略
+async experimental_repairToolCall(failed) {
+    const lower = failed.toolCall.toolName.toLowerCase()
+    
+    // 策略1：大小写修复（"Read" → "read"）
+    if (lower !== failed.toolCall.toolName && tools[lower]) {
+        return { ...failed.toolCall, toolName: lower }
+    }
+    
+    // 策略2：兜底到 "invalid" 工具
+    return {
+        ...failed.toolCall,
+        input: JSON.stringify({
+            tool: failed.toolCall.toolName,
+            error: failed.error.message,
+        }),
+        toolName: "invalid",  // invalid 工具返回错误信息给模型
+    }
+}</code></pre>
+
+    <h3>12.2 LiteLLM Proxy 兼容</h3>
+    <p>某些 Anthropic 代理（如 LiteLLM）要求 tools 参数在有 tool call 历史时必须非空。OpenCode 添加 dummy 工具：</p>
+    <pre><code>// llm.ts - _noop dummy tool
+if (isLiteLLMProxy && Object.keys(tools).length === 0 && hasToolCalls(input.messages)) {
+    tools["_noop"] = tool({
+        description: "Placeholder for LiteLLM/Anthropic proxy compatibility",
+        inputSchema: jsonSchema({type: "object", properties: {}}),
+        execute: async () => ({output: "", title: "", metadata: {}}),
+    })
+}</code></pre>
+
+    <h3>12.3 ProviderTransform 多层适配</h3>
+    <p>不同 Provider 对 Schema、消息格式、参数有不同要求，通过 ProviderTransform 统一处理：</p>
+    <ul>
+      <li><strong>schema()</strong>：JSON Schema 方言转换（如 OpenAI 不支持某些 Zod 特性）</li>
+      <li><strong>message()</strong>：消息预处理（通过 wrapLanguageModel middleware）</li>
+      <li><strong>options()</strong>：Provider 特定选项（如 Anthropic 的 thinking budget）</li>
+      <li><strong>temperature/topP/topK</strong>：根据模型能力设置采样参数</li>
+    </ul>
+  </div>
+</div>
+
+<!-- ===== 第13章 完整数据流 ===== -->
+<div class="chapter" id="s13">
+  <h2>第十三章 完整数据流 — 一次 LLM 调用的全生命周期</h2>
+  <div class="card highlight">
+    <svg viewBox="0 0 900 520" xmlns="http://www.w3.org/2000/svg">
+      <!-- 阶段标签 -->
+      <text x="30" y="30" font-size="13" font-weight="700" fill="#1e293b">用户输入</text>
+      <rect x="120" y="15" width="750" height="35" rx="6" fill="#dbeafe" stroke="#3b82f6" stroke-width="1.5"/>
+      <text x="130" y="38" font-size="11" fill="#1e293b">prompt() → createUserMessage() → 解析 parts(Text/File/Agent/Subtask) → 持久化到 DB</text>
+
+      <text x="30" y="80" font-size="13" font-weight="700" fill="#1e293b">消息过滤</text>
+      <rect x="120" y="65" width="750" height="35" rx="6" fill="#d1fae5" stroke="#10b981" stroke-width="1.5"/>
+      <text x="130" y="88" font-size="11" fill="#1e293b">filterCompacted(stream()) → 从最近 compaction 点截断 → 回溯找 lastUser/lastFinished/tasks</text>
+
+      <text x="30" y="130" font-size="13" font-weight="700" fill="#1e293b">溢出检测</text>
+      <rect x="120" y="115" width="750" height="35" rx="6" fill="#fee2e2" stroke="#ef4444" stroke-width="1.5"/>
+      <text x="130" y="138" font-size="11" fill="#1e293b">isOverflow(tokens, model) → token >= context - maxOutput - reserved → 触发 Compaction.create()</text>
+
+      <text x="30" y="180" font-size="13" font-weight="700" fill="#1e293b">Reminder</text>
+      <rect x="120" y="165" width="750" height="35" rx="6" fill="#fef3c7" stroke="#f59e0b" stroke-width="1.5"/>
+      <text x="130" y="188" font-size="11" fill="#1e293b">insertReminders() → plan.txt / build-switch.txt / 完整PlanWorkflow → 注入到 userMessage.parts</text>
+
+      <text x="30" y="230" font-size="13" font-weight="700" fill="#1e293b">工具解析</text>
+      <rect x="120" y="215" width="750" height="35" rx="6" fill="#ede9fe" stroke="#8b5cf6" stroke-width="1.5"/>
+      <text x="130" y="238" font-size="11" fill="#1e293b">ToolRegistry.tools() → schema转换 → Plugin trigger → MCP合并 → disabled()过滤 → user.tools过滤</text>
+
+      <text x="30" y="280" font-size="13" font-weight="700" fill="#1e293b">消息队列</text>
+      <rect x="120" y="265" width="750" height="35" rx="6" fill="#cffafe" stroke="#0891b2" stroke-width="1.5"/>
+      <text x="130" y="288" font-size="11" fill="#1e293b">step > 1 → 包装新user消息为 system-reminder → Plugin messages.transform → toModelMessages()</text>
+
+      <text x="30" y="330" font-size="13" font-weight="700" fill="#1e293b">System构建</text>
+      <rect x="120" y="315" width="750" height="35" rx="6" fill="#dbeafe" stroke="#3b82f6" stroke-width="1.5"/>
+      <text x="130" y="338" font-size="11" fill="#1e293b">environment(model) + instructions(AGENTS.md) + structured output → Provider prompt选择 → Plugin transform</text>
+
+      <text x="30" y="380" font-size="13" font-weight="700" fill="#1e293b">LLM 调用</text>
+      <rect x="120" y="365" width="750" height="35" rx="6" fill="#d1fae5" stroke="#10b981" stroke-width="1.5"/>
+      <text x="130" y="388" font-size="11" fill="#1e293b">streamText() → [system msgs] + [model msgs] → repairToolCall → wrapLanguageModel → ProviderTransform.message</text>
+
+      <text x="30" y="430" font-size="13" font-weight="700" fill="#1e293b">结果处理</text>
+      <rect x="120" y="415" width="750" height="35" rx="6" fill="#fef3c7" stroke="#f59e0b" stroke-width="1.5"/>
+      <text x="130" y="438" font-size="11" fill="#1e293b">SessionProcessor.process() → 实时流式处理 → tool calls执行 → metadata更新 → 持久化</text>
+
+      <text x="30" y="480" font-size="13" font-weight="700" fill="#1e293b">循环判断</text>
+      <rect x="120" y="465" width="750" height="35" rx="6" fill="#fee2e2" stroke="#ef4444" stroke-width="1.5"/>
+      <text x="130" y="488" font-size="11" fill="#1e293b">stop → break退出 | tool-calls → continue下一轮 | compact → 创建Compaction | error → 退出</text>
+    </svg>
+  </div>
+</div>
+
+<!-- ===== 第14章 设计优势 ===== -->
+<div class="chapter" id="s14">
+  <h2>第十四章 上下文工程的 12 大设计优势</h2>
+  <div class="grid-2">
+    <div class="card success">
+      <h3>1. 分层 Prompt 架构</h3>
+      <p>Agent Prompt → Provider Prompt → Environment → Instructions → User System，5 层关注点分离，每层独立可替换。</p>
+    </div>
+    <div class="card success">
+      <h3>2. 模型精准适配</h3>
+      <p>6 套独立 prompt 模板，针对 Claude/GPT-5/GPT-4/Gemini/Trinity/Qwen 的能力特性和 API 差异分别优化。</p>
+    </div>
+    <div class="card success">
+      <h3>3. 动态工具集</h3>
+      <p>每轮循环重新解析工具集，支持条件注册、权限过滤、MCP 合并、Plugin 描述修改，工具集随上下文动态变化。</p>
+    </div>
+    <div class="card success">
+      <h3>4. 智能压缩策略</h3>
+      <p>isOverflow 精确检测 + Compaction Agent 生成结构化摘要 + Prune 保护最近 40K token，三层防线处理上下文溢出。</p>
+    </div>
+    <div class="card success">
+      <h3>5. Plan/Build 双模式</h3>
+      <p>Plan 模式强制只读 + 5 阶段工作流 + plan_exit 工具退出，Build 模式无缝切换并自动注入计划文件路径。</p>
+    </div>
+    <div class="card success">
+      <h3>6. 消息队列包装</h3>
+      <p>step > 1 时自动将用户新消息包装为 system-reminder，防止模型将中间消息误解为新任务。</p>
+    </div>
+    <div class="card success">
+      <h3>7. Prompt Caching</h3>
+      <p>检测 System Prompt header 是否变化，未变时拆分为 2 段结构，最大化利用 Provider 的 KV-cache 缓存。</p>
+    </div>
+    <div class="card success">
+      <h3>8. 媒体兼容性适配</h3>
+      <p>检测 Provider 是否支持 tool result 中的媒体附件，不支持时自动提取为独立 user 消息。</p>
+    </div>
+    <div class="card success">
+      <h3>9. 工具调用修复</h3>
+      <p>experimental_repairToolCall 自动修复大小写错误，兜底到 invalid 工具返回错误信息引导模型纠正。</p>
+    </div>
+    <div class="card success">
+      <h3>10. 目录级指令发现</h3>
+      <p>Read 工具读文件时自动发现目录链中的 AGENTS.md/CLAUDE.md，实现"读什么文件就看到什么规范"的智能关联。</p>
+    </div>
+    <div class="card success">
+      <h3>11. Plugin Transform 扩展</h3>
+      <p>6 个 transform 钩子覆盖上下文构建全链路，Plugin 可注入/修改 System Prompt、消息历史、工具定义、LLM 参数。</p>
+    </div>
+    <div class="card success">
+      <h3>12. 悬挂 Tool Call 防护</h3>
+      <p>pending/running 状态的工具调用自动转为 output-error "[Tool execution was interrupted]"，防止 Anthropic API 因缺少 tool_result 而报错。</p>
+    </div>
+  </div>
+</div>
+
+<!-- ===== 附录 ===== -->
+<div class="chapter" id="s15">
+  <h2>附录 源码文件索引</h2>
+  <div class="card">
+    <table>
+      <tr><th>文件</th><th>行数</th><th>核心职责</th></tr>
+      <tr><td><code>session/prompt.ts</code></td><td>1972</td><td>loop() 核心循环、resolveTools()、insertReminders()、用户消息创建</td></tr>
+      <tr><td><code>session/llm.ts</code></td><td>280</td><td>stream() System Prompt 组装、Plugin Transform、Prompt Caching、repairToolCall</td></tr>
+      <tr><td><code>session/system.ts</code></td><td>55</td><td>provider() 模型适配、environment() 环境注入、instructions() Codex 路径</td></tr>
+      <tr><td><code>session/compaction.ts</code></td><td>329</td><td>isOverflow()、process() 摘要生成、prune() 裁剪、create() 触发</td></tr>
+      <tr><td><code>session/instruction.ts</code></td><td>193</td><td>system() 指令加载、resolve() 目录级发现、loaded() 去重</td></tr>
+      <tr><td><code>session/message-v2.ts</code></td><td>922</td><td>toModelMessages() 格式转换、filterCompacted()、stream() 消息流</td></tr>
+      <tr><td><code>prompt/anthropic.txt</code></td><td>106</td><td>Claude 模型 prompt 模板</td></tr>
+      <tr><td><code>prompt/beast.txt</code></td><td>148</td><td>GPT-4/o1/o3 模型 prompt 模板</td></tr>
+      <tr><td><code>prompt/codex_header.txt</code></td><td>80</td><td>GPT-5 模型 prompt 模板 + Codex instructions</td></tr>
+      <tr><td><code>prompt/gemini.txt</code></td><td>156</td><td>Gemini 模型 prompt 模板</td></tr>
+      <tr><td><code>prompt/trinity.txt</code></td><td>98</td><td>Trinity 模型 prompt 模板</td></tr>
+      <tr><td><code>prompt/qwen.txt</code></td><td>110</td><td>通用兜底 prompt 模板</td></tr>
+      <tr><td><code>prompt/plan.txt</code></td><td>27</td><td>Plan 模式只读约束</td></tr>
+      <tr><td><code>prompt/build-switch.txt</code></td><td>6</td><td>Plan → Build 模式切换通知</td></tr>
+      <tr><td><code>prompt/max-steps.txt</code></td><td>16</td><td>最大步骤数限制</td></tr>
+      <tr><td><code>prompt/copilot-gpt-5.txt</code></td><td>144</td><td>Copilot GPT-5 专用 prompt</td></tr>
+      <tr><td><code>prompt/plan-reminder-anthropic.txt</code></td><td>68</td><td>Anthropic Plan 模式增强提醒</td></tr>
+    </table>
+  </div>
+</div>
+
+</div>
+</body>
+</html>

@@ -1,0 +1,1089 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OpenCode Question 工具 — AI 主动提问机制深度解析</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body { background: #f8fafc; color: #1e293b; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.7; }
+.hero { background: linear-gradient(135deg, #0f172a 0%, #1e3a5f 40%, #7c3aed 100%); color: white; padding: 80px 40px; text-align: center; }
+.hero h1 { font-size: 2.6em; margin-bottom: 16px; }
+.hero p { font-size: 1.15em; opacity: 0.9; max-width: 900px; margin: 0 auto; }
+.hero .badge { display: inline-block; background: rgba(255,255,255,0.15); padding: 6px 16px; border-radius: 20px; margin-top: 16px; font-size: 0.88em; }
+.container { max-width: 1100px; margin: 0 auto; padding: 40px 24px; }
+.chapter { margin-bottom: 48px; }
+.chapter h2 { font-size: 1.8em; color: #1e293b; border-left: 4px solid #7c3aed; padding-left: 16px; margin-bottom: 24px; }
+.chapter h3 { font-size: 1.3em; color: #334155; margin: 20px 0 12px; }
+.chapter h4 { font-size: 1.1em; color: #475569; margin: 16px 0 8px; }
+.card { background: white; border-radius: 12px; padding: 28px; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); border: 1px solid #e2e8f0; }
+.card.highlight { border-left: 4px solid #7c3aed; }
+.card.warn { border-left: 4px solid #f59e0b; }
+.card.success { border-left: 4px solid #10b981; }
+.card.danger { border-left: 4px solid #ef4444; }
+.card.purple { border-left: 4px solid #8b5cf6; }
+.card.cyan { border-left: 4px solid #0891b2; }
+pre { background: #1e293b; color: #e2e8f0; padding: 20px; border-radius: 8px; overflow-x: auto; font-size: 0.85em; line-height: 1.6; margin: 12px 0; }
+code { font-family: 'JetBrains Mono', 'Fira Code', Consolas, monospace; }
+.ic { background: #f1f5f9; padding: 2px 8px; border-radius: 4px; font-size: 0.9em; color: #be185d; }
+table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 0.92em; }
+th, td { padding: 10px 14px; text-align: left; border-bottom: 1px solid #e2e8f0; }
+th { background: #f8fafc; font-weight: 600; color: #475569; }
+.tag { display: inline-block; padding: 2px 10px; border-radius: 12px; font-size: 0.78em; font-weight: 600; margin: 2px; }
+.tag-blue { background: #dbeafe; color: #1d4ed8; }
+.tag-green { background: #d1fae5; color: #059669; }
+.tag-amber { background: #fef3c7; color: #d97706; }
+.tag-purple { background: #ede9fe; color: #7c3aed; }
+.tag-red { background: #fee2e2; color: #dc2626; }
+.tag-cyan { background: #cffafe; color: #0891b2; }
+.note { background: #eff6ff; border: 1px solid #bfdbfe; padding: 16px; border-radius: 8px; margin: 12px 0; }
+.note strong { color: #1d4ed8; }
+.note.warn-note { background: #fffbeb; border-color: #fde68a; }
+.note.warn-note strong { color: #d97706; }
+ul, ol { padding-left: 24px; margin: 8px 0; }
+li { margin: 6px 0; }
+svg { max-width: 100%; margin: 16px 0; }
+.grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+@media (max-width: 768px) { .grid-2 { grid-template-columns: 1fr; } }
+.flow-arrow { text-align: center; font-size: 1.5em; color: #94a3b8; margin: 8px 0; }
+.option-demo { border: 2px solid #e2e8f0; border-radius: 12px; padding: 20px; margin: 12px 0; background: #fafbfc; }
+.option-item { display: flex; align-items: flex-start; gap: 12px; padding: 10px 14px; border: 2px solid #e2e8f0; border-radius: 8px; margin: 6px 0; cursor: default; transition: all 0.15s; }
+.option-item.picked { border-color: #7c3aed; background: #f5f3ff; }
+.option-item .radio { width: 18px; height: 18px; border: 2px solid #94a3b8; border-radius: 50%; margin-top: 2px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; }
+.option-item.picked .radio { border-color: #7c3aed; }
+.option-item.picked .radio::after { content: ''; width: 8px; height: 8px; border-radius: 50%; background: #7c3aed; }
+.option-label { font-weight: 600; color: #1e293b; }
+.option-desc { font-size: 0.88em; color: #64748b; margin-top: 2px; }
+</style>
+</head>
+<body>
+
+<div class="hero">
+  <h1>OpenCode Question 工具深度解析</h1>
+  <p>Promise 阻塞 · SSE 事件驱动 · 双端 UI · 客户端白名单 · Plan 模式集成 — AI 如何在自动化流程中"暂停"向用户提问</p>
+  <div class="badge">场景：医疗智能体问诊 / 需求澄清 / Plan 审批 | 涉及 8 个核心源文件 | 全链路解析</div>
+</div>
+
+<div class="container">
+
+<!-- TOC -->
+<div style="background: white; border: 2px solid #e2e8f0; border-radius: 12px; padding: 24px; margin-bottom: 28px;">
+  <h3 style="color: #7c3aed; margin-bottom: 12px; font-size: 1.15em;">📑 目录</h3>
+  <ol style="columns: 2; column-gap: 30px; padding-left: 22px;">
+    <li style="margin: 6px 0;"><a href="#s1" style="color: #1e293b; text-decoration: none;">Question 工具存在的意义</a></li>
+    <li style="margin: 6px 0;"><a href="#s2" style="color: #1e293b; text-decoration: none;">四层架构全景图</a></li>
+    <li style="margin: 6px 0;"><a href="#s3" style="color: #1e293b; text-decoration: none;">Zod Schema 数据模型</a></li>
+    <li style="margin: 6px 0;"><a href="#s4" style="color: #1e293b; text-decoration: none;">Promise 阻塞：核心魔法</a></li>
+    <li style="margin: 6px 0;"><a href="#s5" style="color: #1e293b; text-decoration: none;">SSE 事件驱动与前端状态同步</a></li>
+    <li style="margin: 6px 0;"><a href="#s6" style="color: #1e293b; text-decoration: none;">客户端白名单机制</a></li>
+    <li style="margin: 6px 0;"><a href="#s7" style="color: #1e293b; text-decoration: none;">Web UI — SessionQuestionDock</a></li>
+    <li style="margin: 6px 0;"><a href="#s8" style="color: #1e293b; text-decoration: none;">CLI TUI — QuestionPrompt</a></li>
+    <li style="margin: 6px 0;"><a href="#s9" style="color: #1e293b; text-decoration: none;">RejectedError 与循环中断</a></li>
+    <li style="margin: 6px 0;"><a href="#s10" style="color: #1e293b; text-decoration: none;">Headless 模式下的 deny 策略</a></li>
+    <li style="margin: 6px 0;"><a href="#s11" style="color: #1e293b; text-decoration: none;">Plan 模式中的 Question 集成</a></li>
+    <li style="margin: 6px 0;"><a href="#s12" style="color: #1e293b; text-decoration: none;">Prompt 引导：何时让 AI 提问</a></li>
+    <li style="margin: 6px 0;"><a href="#s13" style="color: #1e293b; text-decoration: none;">完整生命周期与核心规律总结</a></li>
+  </ol>
+</div>
+
+<!-- ===== 第一章 ===== -->
+<div class="chapter" id="s1">
+  <h2>Question 工具存在的意义</h2>
+  <div class="card highlight">
+    <h3>核心问题：AI Agent 不应该"猜"用户的需求</h3>
+    <p>在传统的 AI 编码助手中，当模型遇到歧义时，通常会自行做出假设并继续执行。这导致：</p>
+    <table>
+      <tr><th>问题</th><th>后果</th><th>Question 的解决方式</th></tr>
+      <tr><td><span class="tag tag-red">需求歧义</span></td><td>模型选错技术栈，重做</td><td>结构化选项让用户选</td></tr>
+      <tr><td><span class="tag tag-amber">实现分歧</span></td><td>模型用 A 方案，用户要 B</td><td>提前展示方案对比</td></tr>
+      <tr><td><span class="tag tag-purple">上下文缺失</span></td><td>模型不知道用户的业务约束</td><td>主动询问关键信息</td></tr>
+      <tr><td><span class="tag tag-cyan">审批节点</span></td><td>模型直接执行危险操作</td><td>Plan 完成后等用户确认</td></tr>
+    </table>
+  </div>
+
+  <div class="card success">
+    <h3>Question 的设计哲学</h3>
+    <div class="grid-2">
+      <div>
+        <h4>传统 AI 助手</h4>
+        <pre><code>用户："添加认证系统"
+AI：(假设用 JWT，开始写代码)
+...3步后发现用户想用 Session...
+→ 回退、重做、浪费 token</code></pre>
+      </div>
+      <div>
+        <h4>OpenCode Question</h4>
+        <pre><code>用户："添加认证系统"
+AI：调用 Question 工具 →
+  Q: "使用哪种认证方式？"
+  ○ JWT (无状态，适合 API)
+  ○ Session (有状态，适合 Web)
+→ 用户选择后，精准执行</code></pre>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== 第二章 ===== -->
+<div class="chapter" id="s2">
+  <h2>四层架构全景图</h2>
+
+  <svg viewBox="0 0 960 520" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <marker id="a" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#7c3aed"/></marker>
+      <marker id="b" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#10b981"/></marker>
+      <marker id="c" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#ef4444"/></marker>
+    </defs>
+
+    <!-- Layer 1: Tool Definition -->
+    <rect x="20" y="20" width="440" height="100" rx="12" fill="#f5f3ff" stroke="#7c3aed" stroke-width="2"/>
+    <text x="40" y="45" font-size="14" font-weight="700" fill="#7c3aed">① 工具定义层 (src/tool/question.ts)</text>
+    <text x="40" y="68" font-size="11" fill="#475569">Tool.define("question", { parameters: z.object({</text>
+    <text x="40" y="85" font-size="11" fill="#475569">  questions: z.array(Question.Info.omit({custom: true}))</text>
+    <text x="40" y="102" font-size="11" fill="#475569">}) — 描述从 question.txt 加载（11行指令）</text>
+
+    <!-- Layer 2: Data Model -->
+    <rect x="500" y="20" width="440" height="100" rx="12" fill="#eff6ff" stroke="#3b82f6" stroke-width="2"/>
+    <text x="520" y="45" font-size="14" font-weight="700" fill="#1d4ed8">② 数据模型层 (src/question/index.ts)</text>
+    <text x="520" y="68" font-size="11" fill="#475569">Question.Info = { question, header, options[],</text>
+    <text x="520" y="85" font-size="11" fill="#475569">  multiple?, custom? }</text>
+    <text x="520" y="102" font-size="11" fill="#475569">Question.Option = { label, description }</text>
+
+    <!-- Layer 3: Promise Blocking -->
+    <rect x="20" y="150" width="440" height="110" rx="12" fill="#fef2f2" stroke="#ef4444" stroke-width="2"/>
+    <text x="40" y="175" font-size="14" font-weight="700" fill="#dc2626">③ Promise 阻塞层</text>
+    <text x="40" y="198" font-size="11" fill="#475569">Question.ask() → new Promise((resolve, reject)</text>
+    <text x="40" y="215" font-size="11" fill="#475569">  pending[id] = { info, resolve, reject }</text>
+    <text x="40" y="232" font-size="11" fill="#475569">  Bus.publish(Event.Asked, info))</text>
+    <text x="40" y="249" font-size="11" fill="#dc2626" font-weight="700">→ 整个 ReAct 循环在此 await 暂停！</text>
+
+    <!-- Layer 4: Event + UI -->
+    <rect x="500" y="150" width="440" height="110" rx="12" fill="#f0fdf4" stroke="#10b981" stroke-width="2"/>
+    <text x="520" y="175" font-size="14" font-weight="700" fill="#059669">④ 事件 + UI 层</text>
+    <text x="520" y="198" font-size="11" fill="#475569">Bus Event: question.asked → SSE → 前端</text>
+    <text x="520" y="215" font-size="11" fill="#475569">Web: SessionQuestionDock (SolidJS)</text>
+    <text x="520" y="232" font-size="11" fill="#475569">CLI: QuestionPrompt (Ink/Opentui)</text>
+    <text x="520" y="249" font-size="11" fill="#475569">API: POST /question/:id/reply | /reject</text>
+
+    <!-- Arrows -->
+    <line x1="240" y1="120" x2="240" y2="145" stroke="#7c3aed" stroke-width="2" marker-end="url(#a)"/>
+    <line x1="720" y1="120" x2="720" y2="145" stroke="#10b981" stroke-width="2" marker-end="url(#b)"/>
+
+    <!-- Bottom: Flow -->
+    <rect x="20" y="290" width="920" height="220" rx="12" fill="#fffbeb" stroke="#f59e0b" stroke-width="2"/>
+    <text x="480" y="315" text-anchor="middle" font-size="14" font-weight="700" fill="#d97706">完整数据流</text>
+
+    <text x="40" y="345" font-size="11" fill="#1e293b" font-weight="700">AI 模型</text>
+    <text x="40" y="365" font-size="10" fill="#475569">tool_call: question</text>
+
+    <line x1="120" y1="355" x2="170" y2="355" stroke="#7c3aed" stroke-width="2" marker-end="url(#a)"/>
+
+    <text x="180" y="345" font-size="11" fill="#1e293b" font-weight="700">question.ts</text>
+    <text x="180" y="365" font-size="10" fill="#475569">Question.ask()</text>
+
+    <line x1="280" y1="355" x2="330" y2="355" stroke="#7c3aed" stroke-width="2" marker-end="url(#a)"/>
+
+    <text x="340" y="345" font-size="11" fill="#1e293b" font-weight="700">Promise</text>
+    <text x="340" y="365" font-size="10" fill="#dc2626">await 暂停</text>
+
+    <line x1="430" y1="355" x2="480" y2="355" stroke="#ef4444" stroke-width="2" marker-end="url(#c)"/>
+
+    <text x="490" y="345" font-size="11" fill="#1e293b" font-weight="700">Bus → SSE</text>
+    <text x="490" y="365" font-size="10" fill="#475569">question.asked</text>
+
+    <line x1="590" y1="355" x2="640" y2="355" stroke="#10b981" stroke-width="2" marker-end="url(#b)"/>
+
+    <text x="650" y="345" font-size="11" fill="#1e293b" font-weight="700">前端 UI</text>
+    <text x="650" y="365" font-size="10" fill="#475569">展示选项</text>
+
+    <line x1="730" y1="355" x2="780" y2="355" stroke="#10b981" stroke-width="2" marker-end="url(#b)"/>
+
+    <text x="790" y="345" font-size="11" fill="#1e293b" font-weight="700">用户选择</text>
+    <text x="790" y="365" font-size="10" fill="#475569">reply/reject</text>
+
+    <!-- Return flow -->
+    <text x="40" y="420" font-size="11" fill="#1e293b" font-weight="700">用户回复</text>
+    <text x="40" y="440" font-size="10" fill="#475569">POST /reply</text>
+
+    <line x1="120" y1="430" x2="170" y2="430" stroke="#10b981" stroke-width="2" marker-end="url(#b)"/>
+
+    <text x="180" y="420" font-size="11" fill="#1e293b" font-weight="700">Question.reply()</text>
+    <text x="180" y="440" font-size="10" fill="#475569">resolve(answers)</text>
+
+    <line x1="310" y1="430" x2="360" y2="430" stroke="#10b981" stroke-width="2" marker-end="url(#b)"/>
+
+    <text x="370" y="420" font-size="11" fill="#1e293b" font-weight="700">Promise resolve</text>
+    <text x="370" y="440" font-size="10" fill="#059669">await 恢复</text>
+
+    <line x1="500" y1="430" x2="550" y2="430" stroke="#10b981" stroke-width="2" marker-end="url(#b)"/>
+
+    <text x="560" y="420" font-size="11" fill="#1e293b" font-weight="700">question.ts</text>
+    <text x="560" y="440" font-size="10" fill="#475569">格式化 answers</text>
+
+    <line x1="660" y1="430" x2="710" y2="430" stroke="#10b981" stroke-width="2" marker-end="url(#b)"/>
+
+    <text x="720" y="420" font-size="11" fill="#1e293b" font-weight="700">AI 模型</text>
+    <text x="720" y="440" font-size="10" fill="#059669">收到答案，继续执行</text>
+
+    <text x="480" y="490" text-anchor="middle" font-size="12" fill="#d97706" font-weight="700">整条链路：AI 调用 → Promise 暂停 → SSE 推送 → UI 展示 → 用户回答 → Promise 恢复 → AI 继续</text>
+  </svg>
+</div>
+
+<!-- ===== 第三章 ===== -->
+<div class="chapter" id="s3">
+  <h2>Zod Schema 数据模型</h2>
+
+  <div class="card highlight">
+    <h3>Question.Info — 问题结构定义</h3>
+    <pre><code>// src/question/index.ts — 数据模型
+export namespace Question {
+    export const Option = z.object({
+        label:       z.string().describe("Display text (1-5 words, concise)"),
+        description: z.string().describe("Explanation of choice"),
+    })
+
+    export const Info = z.object({
+        question: z.string().describe("Complete question"),
+        header:   z.string().describe("Very short label (max 30 chars)"),
+        options:  z.array(Option).describe("Available choices"),
+        multiple: z.boolean().optional().describe("Allow selecting multiple choices"),
+        custom:   z.boolean().optional().describe("Allow typing a custom answer (default: true)"),
+    })
+
+    export const Answer = z.array(z.string())
+    // 每个问题的答案是一个字符串数组（多选时包含多个）
+
+    export const Reply = z.object({
+        answers: z.array(Answer).describe(
+            "User answers in order of questions (each answer is an array of selected labels)"
+        ),
+    })
+}</code></pre>
+  </div>
+
+  <div class="card success">
+    <h3>Schema 可视化：一次提问的结构</h3>
+    <div class="option-demo">
+      <div style="margin-bottom: 12px;">
+        <span class="tag tag-purple">header</span> <strong>认证方式</strong>
+        <span style="color: #94a3b8; margin-left: 12px;">← "Very short label (max 30 chars)"</span>
+      </div>
+      <div style="margin-bottom: 8px; color: #475569;">
+        <span class="tag tag-blue">question</span> 您希望使用哪种认证方式？
+        <span style="color: #94a3b8; margin-left: 12px;">← "Complete question"</span>
+      </div>
+      <div class="option-item picked">
+        <div class="radio"></div>
+        <div>
+          <div class="option-label">JWT (Recommended)</div>
+          <div class="option-desc">无状态令牌，适合 API 和微服务架构</div>
+        </div>
+      </div>
+      <div class="option-item">
+        <div class="radio"></div>
+        <div>
+          <div class="option-label">Session Cookie</div>
+          <div class="option-desc">有状态会话，适合传统 Web 应用</div>
+        </div>
+      </div>
+      <div class="option-item">
+        <div class="radio"></div>
+        <div>
+          <div class="option-label">OAuth 2.0</div>
+          <div class="option-desc">第三方授权，适合需要社交登录的场景</div>
+        </div>
+      </div>
+      <div style="margin-top: 8px; padding: 8px 12px; background: #f1f5f9; border-radius: 6px; font-size: 0.88em; color: #64748b;">
+        <span class="tag tag-cyan">custom: true (默认)</span> 自动添加 "Type your own answer" 选项 → 用户可以输入任意文本
+      </div>
+      <div style="margin-top: 8px; padding: 8px 12px; background: #fef3c7; border-radius: 6px; font-size: 0.88em; color: #d97706;">
+        <span class="tag tag-amber">multiple: false (默认)</span> 单选模式 | <span class="tag tag-green">multiple: true</span> → 多选模式（checkbox）
+      </div>
+    </div>
+  </div>
+
+  <div class="card warn">
+    <h3>question.txt — 11 行工具描述（精简但精准）</h3>
+    <pre><code>// src/tool/question.txt — 模型看到的工具描述
+Use this tool when you need to ask the user questions during execution.
+This allows you to:
+1. Gather user preferences or requirements
+2. Clarify ambiguous instructions
+3. Get decisions on implementation choices as you work
+4. Offer choices to the user about what direction to take.
+
+Usage notes:
+- When `custom` is enabled (default), a "Type your own answer" option
+  is added automatically; don't include "Other" or catch-all options
+- Answers are returned as arrays of labels;
+  set `multiple: true` to allow selecting more than one
+- If you recommend a specific option, make that the first option
+  in the list and add "(Recommended)" at the end of the label</code></pre>
+    <div class="note">
+      <strong>设计要点：</strong>最后一条指令是关键 — 告诉模型把推荐项放第一位并标注 "(Recommended)"，利用 UI 上的首选项视觉优势引导用户选择最优方案。
+    </div>
+  </div>
+</div>
+
+<!-- ===== 第四章 ===== -->
+<div class="chapter" id="s4">
+  <h2>Promise 阻塞：核心魔法</h2>
+
+  <div class="card danger">
+    <h3>Question 如何让整个 AI 循环"暂停"？</h3>
+    <p>这是 Question 工具最精妙的设计：利用 JavaScript 的 <code>Promise</code> 机制，让 AI 的 ReAct 循环在 <code>await</code> 处自然挂起，直到用户回复。</p>
+    <pre><code>// src/question/index.ts — ask() 函数
+export async function ask(input: {
+    sessionID: string
+    questions: Info[]
+    tool?: { messageID: string; callID: string }
+}): Promise&lt;Answer[]&gt; {
+    const s = await state()
+    const id = Identifier.ascending("question")
+
+    return new Promise&lt;Answer[]&gt;((resolve, reject) => {
+        const info: Request = {
+            id, sessionID: input.sessionID,
+            questions: input.questions, tool: input.tool,
+        }
+        // ① 将 resolve/reject 保存到 pending 字典
+        s.pending[id] = { info, resolve, reject }
+        // ② 通过 Bus 发布事件 → SSE → 前端
+        Bus.publish(Event.Asked, info)
+    })
+    // ③ Promise 没有立即 resolve → await 会一直等待
+    // ④ 整个 tool.execute() 卡住 → 整个 ReAct 循环卡住
+}</code></pre>
+  </div>
+
+  <div class="card success">
+    <h3>阻塞链路图</h3>
+    <pre><code>// 调用栈（从上到下依次 await）：
+prompt.ts loop()                    // ← 主循环
+  └→ processor.process()            // ← 处理 LLM 流
+       └→ AI SDK tool execution     // ← 执行工具
+            └→ question.ts execute  // ← QuestionTool.execute()
+                 └→ Question.ask()  // ← new Promise() 挂起
+                      └→ ???        // 等待用户回复
+
+// 当用户回复时：
+Question.reply()                    // ← API 调用
+  └→ pending[id].resolve(answers)   // ← Promise resolve
+       └→ Question.ask() 返回       // ← await 恢复
+            └→ execute() 返回       // ← 格式化答案
+                 └→ processor 继续  // ← 工具结果传回模型
+                      └→ loop 继续  // ← 下一轮 ReAct</code></pre>
+    <div class="note">
+      <strong>关键理解：</strong>这不是"轮询"或"定时器"，而是原生的 Promise 异步等待。Node.js/Bun 的事件循环会在 Promise pending 时处理其他事件（如 HTTP 请求），因此服务器不会阻塞。
+    </div>
+  </div>
+
+  <div class="card purple">
+    <h3>pending 字典 — 内存中的等待队列</h3>
+    <pre><code>// Instance.state — 进程级别的单例状态
+const state = Instance.state(async () => {
+    const pending: Record&lt;string, {
+        info: Request           // 问题详情
+        resolve: (answers: Answer[]) => void  // 成功回调
+        reject: (e: any) => void              // 失败回调
+    }&gt; = {}
+    return { pending }
+})
+
+// 多个 Question 可以同时 pending！
+// 但 UI 层每次只展示第一个（FIFO）
+// session-request-tree.ts 中 sessionQuestionRequest() 取第一个</code></pre>
+  </div>
+</div>
+
+<!-- ===== 第五章 ===== -->
+<div class="chapter" id="s5">
+  <h2>SSE 事件驱动与前端状态同步</h2>
+
+  <div class="card highlight">
+    <h3>三个 Bus 事件</h3>
+    <table>
+      <tr><th>事件</th><th>触发时机</th><th>携带数据</th><th>前端行为</th></tr>
+      <tr>
+        <td><span class="tag tag-purple">question.asked</span></td>
+        <td>Question.ask() 调用时</td>
+        <td>完整 Request（id, sessionID, questions[], tool?）</td>
+        <td>添加到 store.question[sessionID] 数组</td>
+      </tr>
+      <tr>
+        <td><span class="tag tag-green">question.replied</span></td>
+        <td>Question.reply() 调用时</td>
+        <td>{ sessionID, requestID, answers[] }</td>
+        <td>从 store 中移除该 request</td>
+      </tr>
+      <tr>
+        <td><span class="tag tag-red">question.rejected</span></td>
+        <td>Question.reject() 调用时</td>
+        <td>{ sessionID, requestID }</td>
+        <td>从 store 中移除该 request</td>
+      </tr>
+    </table>
+  </div>
+
+  <div class="card success">
+    <h3>前端 Event Reducer — 状态同步</h3>
+    <pre><code>// packages/app/src/context/global-sync/event-reducer.ts
+case "question.asked": {
+    const question = event.properties as QuestionRequest
+    const questions = input.store.question[question.sessionID]
+    if (!questions) {
+        // 首次提问：创建数组
+        input.setStore("question", question.sessionID, [question])
+        break
+    }
+    // 已有提问：二分查找插入位置，保持有序
+    const result = Binary.search(questions, question.id, (q) => q.id)
+    if (result.found) {
+        input.setStore("question", question.sessionID, result.index, reconcile(question))
+    } else {
+        input.setStore("question", question.sessionID,
+            produce((draft) => { draft.splice(result.index, 0, question) }))
+    }
+    break
+}
+
+case "question.replied":
+case "question.rejected": {
+    // 回复或拒绝 → 从 store 中移除
+    const props = event.properties as { sessionID: string; requestID: string }
+    const questions = input.store.question[props.sessionID]
+    if (!questions) break
+    const result = Binary.search(questions, props.requestID, (q) => q.id)
+    if (!result.found) break
+    input.setStore("question", props.sessionID,
+        produce((draft) => { draft.splice(result.index, 1) }))
+    break
+}</code></pre>
+  </div>
+
+  <div class="card cyan">
+    <h3>通知系统 — 用户不在当前页面时</h3>
+    <pre><code>// packages/app/src/pages/layout.tsx — 全局通知
+if (e.details?.type === "question.asked") {
+    // 系统通知（桌面通知）
+    if (settings.notifications.agent()) {
+        void platform.notify(title, description, href)
+    }
+    // 如果不在当前会话，显示 Toast
+    const toastId = showToast({
+        persistent: true,     // ← 不自动消失
+        icon: "bubble-5",
+        title: "Question",
+        description: `${sessionTitle} - ${projectName}`,
+        actions: [
+            { label: "Go to session", onClick: () => navigate(href) },
+            { label: "Dismiss", onClick: "dismiss" },
+        ],
+    })
+}</code></pre>
+    <div class="note">
+      <strong>冷却机制：</strong>同一个 session 的通知有冷却时间（<code>cooldownMs</code>），避免频繁弹出。
+    </div>
+  </div>
+</div>
+
+<!-- ===== 第六章 ===== -->
+<div class="chapter" id="s6">
+  <h2>客户端白名单机制</h2>
+
+  <div class="card danger">
+    <h3>Question 不是所有客户端都能用</h3>
+    <pre><code>// src/tool/registry.ts — 工具注册
+async function all(): Promise&lt;Tool.Info[]&gt; {
+    const config = await Config.get()
+    const question = ["app", "cli", "desktop"].includes(Flag.OPENCODE_CLIENT)
+                     || Flag.OPENCODE_ENABLE_QUESTION_TOOL
+    //               ↑ 白名单客户端          ↑ 或显式环境变量开启
+
+    return [
+        InvalidTool,
+        ...(question ? [QuestionTool] : []),  // ← 条件注册
+        BashTool, ReadTool, GlobTool, ...
+    ]
+}</code></pre>
+    <table>
+      <tr><th>客户端</th><th>OPENCODE_CLIENT</th><th>Question 可用？</th><th>原因</th></tr>
+      <tr><td><span class="tag tag-green">Web App</span></td><td>app</td><td>✅ 可用</td><td>有完整 UI 组件</td></tr>
+      <tr><td><span class="tag tag-green">CLI</span></td><td>cli</td><td>✅ 可用</td><td>有 TUI 组件</td></tr>
+      <tr><td><span class="tag tag-green">Desktop</span></td><td>desktop</td><td>✅ 可用</td><td>有完整 UI 组件</td></tr>
+      <tr><td><span class="tag tag-red">API 直调</span></td><td>web / 其他</td><td>❌ 不可用</td><td>没有交互式 UI</td></tr>
+      <tr><td><span class="tag tag-amber">自定义集成</span></td><td>任意</td><td>⚠ 需环境变量</td><td>OPENCODE_ENABLE_QUESTION_TOOL=true</td></tr>
+    </table>
+    <div class="note warn-note">
+      <strong>为什么限制？</strong>Question.ask() 会阻塞整个 ReAct 循环。如果客户端没有交互式 UI 来展示问题和收集答案，Promise 永远不会 resolve，AI 将永远卡住。因此，headless 模式（CI/CD、GitHub Actions）会直接 deny。
+    </div>
+  </div>
+</div>
+
+<!-- ===== 第七章 ===== -->
+<div class="chapter" id="s7">
+  <h2>Web UI — SessionQuestionDock</h2>
+
+  <div class="card highlight">
+    <h3>组件层级</h3>
+    <pre><code>// 组件嵌套关系
+session-composer-region.tsx
+  └→ SessionQuestionDock (session-question-dock.tsx, 447行)
+       └→ DockPrompt (dock-prompt.tsx, 通用布局)
+            ├── header: 进度条 + "N of M questions"
+            ├── children: 问题文本 + 选项列表 + 自定义输入
+            └── footer: Dismiss + Back + Next/Submit</code></pre>
+  </div>
+
+  <div class="card success">
+    <h3>核心交互状态机</h3>
+    <pre><code>// session-question-dock.tsx — 状态管理
+const [store, setStore] = createStore({
+    tab: 0,                    // 当前问题索引
+    answers: [] as QuestionAnswer[],  // 每个问题的答案
+    custom: [] as string[],    // 自定义输入内容
+    customOn: [] as boolean[], // 是否启用了自定义
+    editing: false,            // 是否在编辑自定义输入
+    sending: false,            // 是否正在发送回复
+})
+
+// 单选题流程：
+pick(answer) → answers[tab] = [answer] → 自动跳到下一题
+
+// 多选题流程：
+toggle(answer) → answers[tab].push/pop → 手动点 Next
+
+// 自定义输入流程：
+customOpen() → editing = true → textarea 聚焦
+→ Enter 提交 → commitCustom() → customUpdate()</code></pre>
+  </div>
+
+  <div class="card purple">
+    <h3>状态缓存 — 防止组件卸载丢失</h3>
+    <pre><code>// 模块级缓存 — 组件卸载时保存，重新挂载时恢复
+const cache = new Map&lt;string, {
+    tab: number; answers: QuestionAnswer[];
+    custom: string[]; customOn: boolean[];
+}&gt;()
+
+// onCleanup 时保存到 cache
+onCleanup(() => {
+    if (replied) return
+    cache.set(props.request.id, {
+        tab: store.tab,
+        answers: store.answers.map((a) => (a ? [...a] : [])),
+        custom: store.custom.map((s) => s ?? ""),
+        customOn: store.customOn.map((b) => b ?? false),
+    })
+})
+
+// 初始化时从 cache 恢复
+const cached = cache.get(props.request.id)
+const [store, setStore] = createStore({
+    tab: cached?.tab ?? 0,
+    answers: cached?.answers ?? [],
+    // ...
+})</code></pre>
+    <div class="note">
+      <strong>为什么需要缓存？</strong>SolidJS 的 <code>Show</code> 组件在条件变化时会卸载子组件。如果用户在第 3 题时切到其他会话再切回来，组件重新挂载后需要恢复之前的进度。
+    </div>
+  </div>
+
+  <div class="card cyan">
+    <h3>Composer 阻塞 — 禁用输入框</h3>
+    <pre><code>// session-composer-state.ts — 输入框状态
+const blocked = createMemo(() => {
+    return !!permissionRequest() || !!questionRequest()
+    //     ↑ 有权限请求或有待回答问题 → 禁用文本输入
+})
+
+// session-composer-region.tsx — 条件渲染
+&lt;Show when={props.state.questionRequest()} keyed&gt;
+    {(request) => &lt;SessionQuestionDock request={request} /&gt;}
+&lt;/Show&gt;
+&lt;Show when={!props.state.blocked()}&gt;
+    &lt;Prompt ... /&gt;  ← 被 blocked 时隐藏输入框
+&lt;/Show&gt;</code></pre>
+  </div>
+</div>
+
+<!-- ===== 第八章 ===== -->
+<div class="chapter" id="s8">
+  <h2>CLI TUI — QuestionPrompt</h2>
+
+  <div class="card highlight">
+    <h3>终端中的交互 UI（474 行）</h3>
+    <pre><code>// CLI TUI question.tsx — 键盘快捷键
+useKeyboard((evt) => {
+    // 数字键 1-9 直接选择选项
+    if (digit >= 1 && digit <= max) { moveTo(digit-1); selectOption() }
+
+    // 方向键 / vim 键导航
+    if (evt.name === "up"   || evt.name === "k") moveTo(selected - 1)
+    if (evt.name === "down" || evt.name === "j") moveTo(selected + 1)
+
+    // Tab 切换问题标签页
+    if (evt.name === "tab") selectTab(tab + (evt.shift ? -1 : 1))
+
+    // Enter 确认选择
+    if (evt.name === "return") selectOption()
+
+    // Escape 拒绝提问
+    if (evt.name === "escape") reject()
+})</code></pre>
+  </div>
+
+  <div class="card success">
+    <h3>单选 vs 多选 vs 多问题</h3>
+    <table>
+      <tr><th>场景</th><th>检测条件</th><th>UI 行为</th><th>提交方式</th></tr>
+      <tr>
+        <td><span class="tag tag-green">单选单题</span></td>
+        <td>questions.length === 1 && !multiple</td>
+        <td>无 Tab 栏，直接选</td>
+        <td>选择即提交（<code>pick → reply</code>）</td>
+      </tr>
+      <tr>
+        <td><span class="tag tag-blue">单选多题</span></td>
+        <td>questions.length > 1 && !multiple</td>
+        <td>Tab 栏 + Confirm 页</td>
+        <td>每题自动跳下一题，最后 Confirm</td>
+      </tr>
+      <tr>
+        <td><span class="tag tag-purple">多选</span></td>
+        <td>multiple === true</td>
+        <td>[✓] checkbox 样式</td>
+        <td>toggle 选择，手动 Next → Confirm</td>
+      </tr>
+    </table>
+  </div>
+
+  <div class="card warn">
+    <h3>TUI 渲染示例（单选）</h3>
+    <pre><code>┌─ 认证方式 ─────────────────────────────────┐
+│ 您希望使用哪种认证方式？                       │
+│                                              │
+│  1. JWT (Recommended)                  ✓     │
+│     无状态令牌，适合 API 和微服务架构          │
+│  2. Session Cookie                           │
+│     有状态会话，适合传统 Web 应用              │
+│  3. OAuth 2.0                                │
+│     第三方授权，适合需要社交登录的场景          │
+│  4. Type your own answer                     │
+│                                              │
+│ ↑↓ select  enter confirm  esc dismiss        │
+└──────────────────────────────────────────────┘</code></pre>
+  </div>
+</div>
+
+<!-- ===== 第九章 ===== -->
+<div class="chapter" id="s9">
+  <h2>RejectedError 与循环中断</h2>
+
+  <div class="card danger">
+    <h3>用户点 Dismiss 时会发生什么？</h3>
+    <pre><code>// src/question/index.ts — reject 流程
+export async function reject(requestID: string): Promise&lt;void&gt; {
+    const s = await state()
+    const existing = s.pending[requestID]
+    if (!existing) return
+
+    delete s.pending[requestID]
+    Bus.publish(Event.Rejected, { sessionID, requestID })
+
+    existing.reject(new RejectedError())
+    //              ↑ Promise reject → 抛出异常
+}
+
+export class RejectedError extends Error {
+    constructor() {
+        super("The user dismissed this question")
+    }
+}</code></pre>
+  </div>
+
+  <div class="card warn">
+    <h3>Processor 如何捕获 RejectedError？</h3>
+    <pre><code>// src/session/processor.ts — tool-error 分支
+case "tool-error": {
+    const match = toolcalls[value.toolCallId]
+    if (match && match.state.status === "running") {
+        await Session.updatePart({
+            ...match,
+            state: {
+                status: "error",
+                error: (value.error as any).toString(),
+                // ...
+            },
+        })
+
+        // 关键：区分用户拒绝 vs 真正的错误
+        if (
+            value.error instanceof PermissionNext.RejectedError ||
+            value.error instanceof Question.RejectedError
+        ) {
+            blocked = shouldBreak
+            // shouldBreak = config.experimental?.continue_loop_on_deny !== true
+            // 默认 true → 循环中断，AI 停止
+        }
+        delete toolcalls[value.toolCallId]
+    }
+    break
+}</code></pre>
+    <div class="note warn-note">
+      <strong>默认行为：</strong>用户拒绝提问后，<code>blocked = true</code> → processor 的 while(true) 循环 break → AI 停止输出。这符合直觉：用户拒绝了，AI 应该停下来等用户进一步指示。
+    </div>
+  </div>
+
+  <div class="card purple">
+    <h3>答案格式化 — 模型看到的回复</h3>
+    <pre><code>// question.ts execute — 格式化返回值
+function format(answer: Question.Answer | undefined) {
+    if (!answer?.length) return "Unanswered"
+    return answer.join(", ")
+}
+
+const formatted = params.questions
+    .map((q, i) => `"${q.question}"="${format(answers[i])}"`)
+    .join(", ")
+
+return {
+    title: `Asked ${params.questions.length} question${...}`,
+    output: `User has answered your questions: ${formatted}.
+             You can now continue with the user's answers in mind.`,
+    metadata: { answers },
+}
+
+// 示例输出：
+// "User has answered your questions:
+//  "您希望使用哪种认证方式？"="JWT (Recommended)",
+//  "数据库选型？"="PostgreSQL".
+//  You can now continue with the user's answers in mind."</code></pre>
+  </div>
+</div>
+
+<!-- ===== 第十章 ===== -->
+<div class="chapter" id="s10">
+  <h2>Headless 模式下的 deny 策略</h2>
+
+  <div class="card danger">
+    <h3>CI/CD 中 Question = 死锁</h3>
+    <p>在没有交互式 UI 的环境中（GitHub Actions、<code>opencode run</code>），Question.ask() 的 Promise 永远不会 resolve，导致 AI 循环永久挂起。解决方案：<strong>在权限层直接 deny</strong>。</p>
+    <pre><code>// src/cli/cmd/run.ts — opencode run 命令
+const rules: PermissionNext.Ruleset = [
+    {
+        permission: "question",
+        action: "deny",        // ← 直接拒绝
+        pattern: "*",
+    },
+    {
+        permission: "plan_enter",
+        action: "deny",
+        pattern: "*",
+    },
+    {
+        permission: "plan_exit",
+        action: "deny",
+        pattern: "*",
+    },
+]
+
+// 创建 session 时传入 deny 规则
+const result = await sdk.session.create({
+    title: name,
+    permission: rules,  // ← session 级别的权限覆盖
+})</code></pre>
+  </div>
+
+  <div class="card warn">
+    <h3>GitHub Actions — 同样 deny</h3>
+    <pre><code>// src/cli/cmd/github.ts — GitHub Actions 处理
+session = await Session.create({
+    permission: [
+        {
+            permission: "question",
+            action: "deny",
+            pattern: "*",
+        },
+    ],
+})
+
+// 效果：模型调用 Question 工具时
+// → PermissionNext.ask() 检测到 deny 规则
+// → 抛出 RejectedError
+// → 模型收到 "The user dismissed this question"
+// → 模型自行做出合理假设继续执行</code></pre>
+    <div class="note">
+      <strong>优雅降级：</strong>deny 后模型不会崩溃，而是收到 "dismissed" 错误，自行做出合理假设继续执行。这是 Question 工具的 fallback 设计 — 在无法提问的环境中，AI 退化为"自主决策"模式。
+    </div>
+  </div>
+</div>
+
+<!-- ===== 第十一章 ===== -->
+<div class="chapter" id="s11">
+  <h2>Plan 模式中的 Question 集成</h2>
+
+  <div class="card highlight">
+    <h3>PlanExitTool — 复用 Question 实现审批</h3>
+    <pre><code>// src/tool/plan.ts — Plan 模式退出工具
+export const PlanExitTool = Tool.define("plan_exit", {
+    description: EXIT_DESCRIPTION,
+    parameters: z.object({}),
+    async execute(_params, ctx) {
+        const session = await Session.get(ctx.sessionID)
+        const plan = path.relative(Instance.worktree, Session.plan(session))
+
+        // ① 复用 Question.ask() 向用户确认
+        const answers = await Question.ask({
+            sessionID: ctx.sessionID,
+            questions: [{
+                question: `Plan at ${plan} is complete. Would you like
+                    to switch to the build agent and start implementing?`,
+                header: "Build Agent",
+                custom: false,    // ← 不允许自定义输入
+                options: [
+                    { label: "Yes", description: "Switch to build agent..." },
+                    { label: "No",  description: "Stay with plan agent..." },
+                ],
+            }],
+            tool: ctx.callID ? { messageID: ctx.messageID, callID: ctx.callID } : undefined,
+        })
+
+        // ② 用户选 No → 抛出 RejectedError → 循环中断
+        const answer = answers[0]?.[0]
+        if (answer === "No") throw new Question.RejectedError()
+
+        // ③ 用户选 Yes → 创建 build agent 的用户消息
+        const userMsg: MessageV2.User = {
+            id: Identifier.ascending("message"),
+            sessionID: ctx.sessionID,
+            role: "user", agent: "build", model,
+        }
+        await Session.updateMessage(userMsg)
+        // ... 创建 synthetic text part ...
+
+        return {
+            title: "Switching to build agent",
+            output: "User approved switching to build agent...",
+        }
+    },
+})</code></pre>
+  </div>
+
+  <div class="card success">
+    <h3>Plan 工作流中的 Question 调用点</h3>
+    <pre><code>// prompt.ts — Plan 模式的 system prompt
+`## Plan Workflow
+
+### Phase 1: Initial Understanding
+3. After exploring the code, use the question tool
+   to clarify ambiguities in the user request up front.
+                     ↑ 探索代码后，用 Question 澄清需求
+
+### Phase 3: Review
+3. Use question tool to clarify any remaining
+   questions with the user
+                     ↑ 审查阶段，用 Question 解决遗留问题
+
+### Phase 5: Call plan_exit tool
+**Important:** Use question tool to clarify requirements/approach,
+use plan_exit to request plan approval.
+Do NOT use question tool to ask "Is this plan okay?"
+- that's what plan_exit does.
+                     ↑ 严格区分：Question 澄清需求，PlanExit 审批计划`</code></pre>
+  </div>
+</div>
+
+<!-- ===== 第十二章 ===== -->
+<div class="chapter" id="s12">
+  <h2>Prompt 引导：何时让 AI 提问</h2>
+
+  <div class="card highlight">
+    <h3>不同场景的 Prompt 引导</h3>
+    <table>
+      <tr><th>场景</th><th>Prompt 指令</th><th>引导强度</th></tr>
+      <tr>
+        <td><span class="tag tag-purple">Plan 模式</span></td>
+        <td>"use the question tool to clarify ambiguities in the user request up front"</td>
+        <td><span class="tag tag-red">极强</span> — 明确要求在探索代码后提问</td>
+      </tr>
+      <tr>
+        <td><span class="tag tag-blue">Trinity 模型</span></td>
+        <td>"When the user's request is vague, use the question tool to clarify before reading files or making changes"</td>
+        <td><span class="tag tag-amber">中等</span> — 条件触发</td>
+      </tr>
+      <tr>
+        <td><span class="tag tag-green">Build 模式</span></td>
+        <td>question.txt 工具描述 — "Use this tool when you need to ask the user questions"</td>
+        <td><span class="tag tag-green">弱</span> — 仅工具描述，无额外 prompt</td>
+      </tr>
+    </table>
+  </div>
+
+  <div class="card success">
+    <h3>子 Agent 中的 Question 可用性</h3>
+    <pre><code>// src/tool/task.ts — 子 Agent 权限
+const session = await Session.create({
+    parentID: ctx.sessionID,
+    permission: [
+        { permission: "todowrite", pattern: "*", action: "deny" },
+        { permission: "todoread",  pattern: "*", action: "deny" },
+        // 注意：question 没有在 deny 列表中！
+        // → 子 Agent 可以使用 Question 工具向用户提问
+    ],
+})
+
+// 但工具注册层：
+tools: {
+    todowrite: false,
+    todoread: false,
+    // question 没有显式禁用 → 子 Agent 可以调用
+}</code></pre>
+    <div class="note">
+      <strong>设计意图：</strong>子 Agent 可能需要向用户确认技术细节（例如 explore agent 发现多种可行方案时）。因此 Question 权限对子 Agent 开放，但 TodoWrite 权限关闭（防止子 Agent 篡改父 Agent 的任务列表）。
+    </div>
+  </div>
+</div>
+
+<!-- ===== 第十三章 ===== -->
+<div class="chapter" id="s13">
+  <h2>完整生命周期与核心规律总结</h2>
+
+  <div class="card highlight">
+    <h3>Question 工具的完整生命周期</h3>
+    <svg viewBox="0 0 900 320" xmlns="http://www.w3.org/2000/svg">
+      <defs><marker id="d" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#7c3aed"/></marker></defs>
+
+      <rect x="10" y="20" width="130" height="50" rx="10" fill="#f5f3ff" stroke="#7c3aed" stroke-width="2"/>
+      <text x="75" y="40" text-anchor="middle" font-size="10" font-weight="700" fill="#7c3aed">AI 决定提问</text>
+      <text x="75" y="55" text-anchor="middle" font-size="9" fill="#475569">tool_call: question</text>
+
+      <line x1="140" y1="45" x2="170" y2="45" stroke="#7c3aed" stroke-width="2" marker-end="url(#d)"/>
+
+      <rect x="175" y="20" width="130" height="50" rx="10" fill="#eff6ff" stroke="#3b82f6" stroke-width="2"/>
+      <text x="240" y="40" text-anchor="middle" font-size="10" font-weight="700" fill="#1d4ed8">Question.ask()</text>
+      <text x="240" y="55" text-anchor="middle" font-size="9" fill="#dc2626">Promise 挂起</text>
+
+      <line x1="305" y1="45" x2="335" y2="45" stroke="#7c3aed" stroke-width="2" marker-end="url(#d)"/>
+
+      <rect x="340" y="20" width="130" height="50" rx="10" fill="#fef2f2" stroke="#ef4444" stroke-width="2"/>
+      <text x="405" y="40" text-anchor="middle" font-size="10" font-weight="700" fill="#dc2626">Bus → SSE</text>
+      <text x="405" y="55" text-anchor="middle" font-size="9" fill="#475569">question.asked</text>
+
+      <line x1="470" y1="45" x2="500" y2="45" stroke="#7c3aed" stroke-width="2" marker-end="url(#d)"/>
+
+      <rect x="505" y="20" width="130" height="50" rx="10" fill="#f0fdf4" stroke="#10b981" stroke-width="2"/>
+      <text x="570" y="40" text-anchor="middle" font-size="10" font-weight="700" fill="#059669">前端 UI 渲染</text>
+      <text x="570" y="55" text-anchor="middle" font-size="9" fill="#475569">选项 + 自定义</text>
+
+      <line x1="635" y1="45" x2="665" y2="45" stroke="#7c3aed" stroke-width="2" marker-end="url(#d)"/>
+
+      <rect x="670" y="20" width="130" height="50" rx="10" fill="#fffbeb" stroke="#f59e0b" stroke-width="2"/>
+      <text x="735" y="40" text-anchor="middle" font-size="10" font-weight="700" fill="#d97706">用户回答</text>
+      <text x="735" y="55" text-anchor="middle" font-size="9" fill="#475569">reply / reject</text>
+
+      <!-- 下半部分 -->
+      <line x1="735" y1="70" x2="735" y2="110" stroke="#10b981" stroke-width="2" marker-end="url(#d)"/>
+
+      <rect x="670" y="115" width="130" height="50" rx="10" fill="#f0fdf4" stroke="#10b981" stroke-width="2"/>
+      <text x="735" y="135" text-anchor="middle" font-size="10" font-weight="700" fill="#059669">API 路由</text>
+      <text x="735" y="150" text-anchor="middle" font-size="9" fill="#475569">POST /reply</text>
+
+      <line x1="670" y1="140" x2="640" y2="140" stroke="#10b981" stroke-width="2" marker-end="url(#d)"/>
+
+      <rect x="505" y="115" width="130" height="50" rx="10" fill="#eff6ff" stroke="#3b82f6" stroke-width="2"/>
+      <text x="570" y="135" text-anchor="middle" font-size="10" font-weight="700" fill="#1d4ed8">Question.reply()</text>
+      <text x="570" y="150" text-anchor="middle" font-size="9" fill="#059669">resolve(answers)</text>
+
+      <line x1="505" y1="140" x2="475" y2="140" stroke="#10b981" stroke-width="2" marker-end="url(#d)"/>
+
+      <rect x="340" y="115" width="130" height="50" rx="10" fill="#f5f3ff" stroke="#7c3aed" stroke-width="2"/>
+      <text x="405" y="135" text-anchor="middle" font-size="10" font-weight="700" fill="#7c3aed">Promise 恢复</text>
+      <text x="405" y="150" text-anchor="middle" font-size="9" fill="#059669">await 返回</text>
+
+      <line x1="340" y1="140" x2="310" y2="140" stroke="#10b981" stroke-width="2" marker-end="url(#d)"/>
+
+      <rect x="175" y="115" width="130" height="50" rx="10" fill="#f5f3ff" stroke="#7c3aed" stroke-width="2"/>
+      <text x="240" y="135" text-anchor="middle" font-size="10" font-weight="700" fill="#7c3aed">格式化输出</text>
+      <text x="240" y="150" text-anchor="middle" font-size="9" fill="#475569">"User answered..."</text>
+
+      <line x1="175" y1="140" x2="145" y2="140" stroke="#10b981" stroke-width="2" marker-end="url(#d)"/>
+
+      <rect x="10" y="115" width="130" height="50" rx="10" fill="#d1fae5" stroke="#10b981" stroke-width="2"/>
+      <text x="75" y="135" text-anchor="middle" font-size="10" font-weight="700" fill="#059669">AI 继续执行</text>
+      <text x="75" y="150" text-anchor="middle" font-size="9" fill="#475569">基于答案决策</text>
+
+      <!-- Reject 路径 -->
+      <rect x="670" y="200" width="130" height="50" rx="10" fill="#fee2e2" stroke="#ef4444" stroke-width="2"/>
+      <text x="735" y="220" text-anchor="middle" font-size="10" font-weight="700" fill="#dc2626">reject 路径</text>
+      <text x="735" y="235" text-anchor="middle" font-size="9" fill="#475569">RejectedError</text>
+
+      <line x1="670" y1="225" x2="640" y2="225" stroke="#ef4444" stroke-width="2" marker-end="url(#d)"/>
+
+      <rect x="505" y="200" width="130" height="50" rx="10" fill="#fee2e2" stroke="#ef4444" stroke-width="2"/>
+      <text x="570" y="220" text-anchor="middle" font-size="10" font-weight="700" fill="#dc2626">tool-error</text>
+      <text x="570" y="235" text-anchor="middle" font-size="9" fill="#475569">blocked = true</text>
+
+      <line x1="505" y1="225" x2="475" y2="225" stroke="#ef4444" stroke-width="2" marker-end="url(#d)"/>
+
+      <rect x="340" y="200" width="130" height="50" rx="10" fill="#fee2e2" stroke="#ef4444" stroke-width="2"/>
+      <text x="405" y="220" text-anchor="middle" font-size="10" font-weight="700" fill="#dc2626">循环中断</text>
+      <text x="405" y="235" text-anchor="middle" font-size="9" fill="#475569">while(true) break</text>
+
+      <line x1="340" y1="225" x2="310" y2="225" stroke="#ef4444" stroke-width="2" marker-end="url(#d)"/>
+
+      <rect x="175" y="200" width="130" height="50" rx="10" fill="#fef3c7" stroke="#f59e0b" stroke-width="2"/>
+      <text x="240" y="220" text-anchor="middle" font-size="10" font-weight="700" fill="#d97706">AI 停止</text>
+      <text x="240" y="235" text-anchor="middle" font-size="9" fill="#475569">等待用户指示</text>
+
+      <text x="450" y="300" text-anchor="middle" font-size="11" fill="#94a3b8">两条路径：reply → AI 获得信息继续工作 | reject → AI 停下来等用户</text>
+    </svg>
+  </div>
+
+  <div class="grid-2">
+    <div class="card success">
+      <h3>1. Promise 是核心原语</h3>
+      <p>不用轮询、不用 WebSocket、不用定时器。一个 <code>new Promise</code> 就能让整个 AI 循环优雅地暂停。resolve/reject 存储在内存字典中，通过 API 路由触发。</p>
+    </div>
+    <div class="card success">
+      <h3>2. 事件驱动的双向通信</h3>
+      <p>Bus 事件 → SSE → 前端状态同步。前端不直接调用后端轮询，而是订阅 SSE 流。<code>question.asked</code> 到达时渲染 UI，<code>replied/rejected</code> 到达时移除 UI。</p>
+    </div>
+    <div class="card success">
+      <h3>3. 客户端感知注册</h3>
+      <p>不是所有客户端都能用 Question。registry.ts 根据 <code>OPENCODE_CLIENT</code> 类型条件注册。没有交互 UI 的环境（CI/CD、API 直调）会被 deny，AI 退化为自主决策。</p>
+    </div>
+    <div class="card success">
+      <h3>4. 结构化 > 自由文本</h3>
+      <p>Question 输出是 label + description 的选项列表，而非让用户自由输入。这减少了歧义、提高了回答质量。<code>custom: true</code> 保留灵活性但作为"兜底"而非主要输入方式。</p>
+    </div>
+    <div class="card success">
+      <h3>5. 复用基础设施</h3>
+      <p>PlanExitTool 复用 Question.ask() 实现审批流程。Question 不仅是一个"提问工具"，更是一个通用的"AI 暂停并等待用户输入"的基础设施。</p>
+    </div>
+    <div class="card success">
+      <h3>6. 优雅降级</h3>
+      <p>当 Question 不可用（deny）或被用户拒绝（reject）时，AI 不会崩溃。RejectedError 被 processor 捕获，AI 收到 "dismissed" 错误后自行决定下一步。</p>
+    </div>
+  </div>
+
+  <div class="card danger" style="margin-top: 20px;">
+    <h3>Question vs Permission — 两种"暂停"</h3>
+    <table>
+      <tr><th>维度</th><th>Question 工具</th><th>Permission 系统</th></tr>
+      <tr><td>目的</td><td>收集用户偏好/需求</td><td>授权危险操作</td></tr>
+      <tr><td>触发方</td><td>AI 主动调用</td><td>系统自动拦截</td></tr>
+      <tr><td>用户选择</td><td>从选项中选择</td><td>once / always / reject</td></tr>
+      <tr><td>存储</td><td>内存 pending 字典</td><td>内存 pending 字典</td></tr>
+      <tr><td>阻塞机制</td><td>Promise await</td><td>Promise await</td></tr>
+      <tr><td>拒绝后果</td><td>AI 停止循环</td><td>工具执行跳过 / 循环中断</td></tr>
+      <tr><td>可记忆？</td><td>否（每次都问）</td><td>是（always 自动放行）</td></tr>
+    </table>
+    <p style="margin-top: 12px;">两者共享相同的基础设施（Promise 阻塞 + Bus 事件 + SSE + 前端 DockPrompt），但在语义层面服务于不同的目的：<strong>Question 是"问"，Permission 是"批"</strong>。</p>
+  </div>
+</div>
+
+</div>
+</body>
+</html>

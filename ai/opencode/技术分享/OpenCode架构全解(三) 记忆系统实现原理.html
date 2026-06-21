@@ -1,0 +1,1182 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OpenCode 记忆系统实现原理</title>
+    <style>
+        :root { --primary: #2563eb; --secondary: #7c3aed; --success: #10b981; --warning: #f59e0b; --danger: #ef4444; --info: #06b6d4; --bg: #f8fafc; --card: #fff; --text: #1e293b; --muted: #64748b; --border: #e2e8f0; --code-bg: #0f172a; }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Noto Sans SC', sans-serif; line-height: 1.8; color: var(--text); background: var(--bg); }
+        .container { max-width: 1100px; margin: 0 auto; padding: 20px; }
+        .hero { background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 50%, #312e81 100%); color: white; padding: 60px 30px; text-align: center; border-radius: 24px; margin-bottom: 30px; position: relative; overflow: hidden; }
+        .hero::before { content: ''; position: absolute; top: -50%; left: -50%; width: 200%; height: 200%; background: radial-gradient(circle, rgba(99,102,241,0.1) 0%, transparent 70%); }
+        .hero h1 { font-size: 2.4em; margin-bottom: 15px; position: relative; }
+        .hero .subtitle { color: #a5b4fc; font-size: 1.15em; max-width: 800px; margin: 0 auto 20px; position: relative; }
+        .hero .tags { display: flex; justify-content: center; gap: 12px; flex-wrap: wrap; position: relative; }
+        .hero .tag { background: rgba(255,255,255,0.12); padding: 6px 16px; border-radius: 20px; font-size: 0.9em; border: 1px solid rgba(255,255,255,0.2); }
+        .toc { background: var(--card); border: 2px solid var(--border); border-radius: 16px; padding: 24px; margin-bottom: 28px; }
+        .toc h3 { color: var(--primary); margin-bottom: 12px; font-size: 1.15em; }
+        .toc ol { columns: 2; column-gap: 30px; padding-left: 22px; }
+        .toc li { margin: 6px 0; }
+        .toc a { color: var(--text); text-decoration: none; }
+        .toc a:hover { color: var(--primary); text-decoration: underline; }
+        .section { background: var(--card); border-radius: 18px; padding: 32px; margin-bottom: 28px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.07), 0 2px 4px -2px rgba(0,0,0,0.05); }
+        .section h2 { color: var(--primary); font-size: 1.5em; margin-bottom: 20px; padding-bottom: 12px; border-bottom: 3px solid var(--primary); }
+        .section h3 { color: var(--secondary); font-size: 1.2em; margin: 24px 0 12px 0; }
+        .section h4 { color: var(--text); font-size: 1.05em; margin: 18px 0 8px 0; }
+        pre { background: var(--code-bg); color: #e2e8f0; padding: 20px; border-radius: 12px; overflow-x: auto; margin: 16px 0; font-family: 'JetBrains Mono', 'Fira Code', monospace; font-size: 0.88em; line-height: 1.7; }
+        code { background: #e2e8f0; padding: 2px 7px; border-radius: 4px; font-family: 'JetBrains Mono', 'Fira Code', monospace; font-size: 0.88em; }
+        pre code { background: transparent; padding: 0; }
+        .box { padding: 18px 22px; border-radius: 0 12px 12px 0; margin: 18px 0; font-size: 0.98em; line-height: 1.9; }
+        .box-blue { background: linear-gradient(135deg, #dbeafe, #bfdbfe); border-left: 4px solid var(--primary); }
+        .box-green { background: linear-gradient(135deg, #d1fae5, #a7f3d0); border-left: 4px solid var(--success); }
+        .box-purple { background: linear-gradient(135deg, #ede9fe, #ddd6fe); border-left: 4px solid var(--secondary); }
+        .box-yellow { background: linear-gradient(135deg, #fef3c7, #fde68a); border-left: 4px solid var(--warning); }
+        .box-red { background: linear-gradient(135deg, #fee2e2, #fecaca); border-left: 4px solid var(--danger); }
+        .box-cyan { background: linear-gradient(135deg, #cffafe, #a5f3fc); border-left: 4px solid var(--info); }
+        table { width: 100%; border-collapse: collapse; margin: 16px 0; border-radius: 12px; overflow: hidden; box-shadow: 0 2px 4px rgba(0,0,0,0.06); }
+        th { background: var(--primary); color: white; padding: 14px 16px; text-align: left; font-weight: 600; font-size: 0.95em; }
+        td { padding: 12px 16px; border-bottom: 1px solid var(--border); font-size: 0.95em; }
+        tr:nth-child(even) { background: #f8fafc; }
+        tr:hover { background: #f1f5f9; }
+        .diagram-container { background: white; border: 2px solid var(--border); border-radius: 16px; margin: 20px 0; overflow-x: auto; }
+        .step { display: flex; gap: 16px; margin: 16px 0; padding: 20px; background: linear-gradient(135deg, #f8fafc, #f1f5f9); border-radius: 14px; border-left: 5px solid var(--primary); }
+        .step.green { border-left-color: var(--success); }
+        .step.purple { border-left-color: var(--secondary); }
+        .step.yellow { border-left-color: var(--warning); }
+        .step.red { border-left-color: var(--danger); }
+        .step .num { min-width: 40px; height: 40px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 1.1em; color: white; background: var(--primary); flex-shrink: 0; }
+        .step.green .num { background: var(--success); }
+        .step.purple .num { background: var(--secondary); }
+        .step.yellow .num { background: var(--warning); }
+        .step.red .num { background: var(--danger); }
+        .step .content { flex: 1; }
+        .step .title { font-weight: 700; font-size: 1.05em; margin-bottom: 6px; }
+        .step .file { font-family: 'JetBrains Mono', monospace; font-size: 0.82em; color: var(--secondary); background: #ede9fe; padding: 3px 10px; border-radius: 4px; display: inline-block; margin: 4px 0; }
+        .step .desc { color: var(--muted); margin-top: 8px; }
+        .adv-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; margin: 20px 0; }
+        .adv-card { background: white; border: 2px solid var(--border); border-radius: 14px; padding: 20px; transition: transform 0.2s, box-shadow 0.2s; }
+        .adv-card:hover { transform: translateY(-2px); box-shadow: 0 8px 16px rgba(0,0,0,0.1); }
+        .adv-card .icon { font-size: 2em; margin-bottom: 10px; }
+        .adv-card h4 { color: var(--primary); margin-bottom: 8px; font-size: 1.05em; }
+        .adv-card p { color: var(--muted); font-size: 0.95em; }
+        .footer { text-align: center; padding: 30px; color: var(--muted); border-top: 1px solid var(--border); margin-top: 30px; }
+        ul, ol { margin: 10px 0; padding-left: 22px; }
+        li { margin: 6px 0; }
+    </style>
+</head>
+<body>
+<div class="container">
+
+    <!-- Hero -->
+    <div class="hero">
+        <h1>OpenCode 记忆系统实现原理</h1>
+        <p class="subtitle">
+            LLM 没有真正的"记忆"——它的上下文窗口就是一个不断管理的黑板。<br>
+            OpenCode 用 5 个精心设计的机制，让这块黑板始终<strong>干净、有用、不溢出</strong>。
+        </p>
+        <div class="tags">
+            <span class="tag">Instruction 指令注入</span>
+            <span class="tag">filterCompacted 记忆回放</span>
+            <span class="tag">Compaction 压缩摘要</span>
+            <span class="tag">Prune 工具裁剪</span>
+            <span class="tag">Summary 变更追踪</span>
+        </div>
+    </div>
+
+    <!-- TOC -->
+    <div class="toc">
+        <h3>目录</h3>
+        <ol>
+            <li><a href="#s1">核心洞察：LLM 记忆的本质</a></li>
+            <li><a href="#s2">记忆三层架构</a></li>
+            <li><a href="#s3">五大机制与介入时序</a></li>
+            <li><a href="#s4">机制一：Instruction — 长期记忆注入</a></li>
+            <li><a href="#s5">机制二：filterCompacted — 记忆回放（黑板擦后的粉笔画）</a></li>
+            <li><a href="#s6">机制三：Compaction — 智能压缩（用 LLM 总结 LLM）</a></li>
+            <li><a href="#s7">机制四：Prune — 工具输出裁剪（无 LLM 的廉价方案）</a></li>
+            <li><a href="#s8">机制五：Summary — 代码变更追踪</a></li>
+            <li><a href="#s9">五大机制的协作流程</a></li>
+            <li><a href="#s10">数据模型：Message 与 Part</a></li>
+            <li><a href="#s11">设计优势深度分析</a></li>
+            <li><a href="#s12">与主流方案的对比</a></li>
+        </ol>
+    </div>
+
+    <!-- Section 1: 核心洞察 -->
+    <div class="section" id="s1">
+        <h2>一、核心洞察：LLM 记忆的本质</h2>
+
+        <div class="diagram-container" style="padding: 25px;">
+            <svg width="850" height="280" viewBox="0 0 850 280">
+                <!-- 传统系统 -->
+                <g transform="translate(10, 10)">
+                    <rect width="250" height="250" rx="16" fill="#f0f9ff" stroke="#93c5fd" stroke-width="2"/>
+                    <text x="125" y="35" text-anchor="middle" font-weight="700" font-size="15" fill="#1e40af">传统应用</text>
+                    <text x="125" y="55" text-anchor="middle" font-size="11" fill="#64748b">数据库 = 记忆</text>
+                    <!-- DB icon -->
+                    <rect x="80" y="75" width="90" height="60" rx="8" fill="#3b82f6" opacity="0.9"/>
+                    <text x="125" y="100" text-anchor="middle" font-size="12" fill="white" font-weight="600">Database</text>
+                    <text x="125" y="118" text-anchor="middle" font-size="10" fill="white" opacity="0.8">持久化存储</text>
+                    <!-- Query -->
+                    <text x="125" y="160" text-anchor="middle" font-size="11" fill="#1e293b">SQL 查询 → 精确结果</text>
+                    <text x="125" y="180" text-anchor="middle" font-size="11" fill="#1e293b">容量：无限</text>
+                    <text x="125" y="200" text-anchor="middle" font-size="11" fill="#1e293b">检索：按需精确查询</text>
+                    <text x="125" y="220" text-anchor="middle" font-size="11" fill="#1e293b">生命周期：永久</text>
+                    <text x="125" y="240" text-anchor="middle" font-size="11" fill="#1e293b">管理：开发者显式 CRUD</text>
+                </g>
+
+                <!-- Arrow -->
+                <text x="295" y="145" font-size="30" fill="#94a3b8">→</text>
+                <text x="285" y="170" font-size="9" fill="#94a3b8">范式转变</text>
+
+                <!-- LLM 系统 -->
+                <g transform="translate(340, 10)">
+                    <rect width="250" height="250" rx="16" fill="#fef3c7" stroke="#fbbf24" stroke-width="2"/>
+                    <text x="125" y="35" text-anchor="middle" font-weight="700" font-size="15" fill="#92400e">LLM 系统</text>
+                    <text x="125" y="55" text-anchor="middle" font-size="11" fill="#64748b">上下文窗口 = 记忆</text>
+                    <!-- Window icon -->
+                    <rect x="80" y="75" width="90" height="60" rx="8" fill="#f59e0b" opacity="0.9"/>
+                    <text x="125" y="100" text-anchor="middle" font-size="12" fill="white" font-weight="600">Context</text>
+                    <text x="125" y="118" text-anchor="middle" font-size="10" fill="white" opacity="0.8">有限窗口</text>
+                    <text x="125" y="160" text-anchor="middle" font-size="11" fill="#1e293b">全量发送 → LLM 自己理解</text>
+                    <text x="125" y="180" text-anchor="middle" font-size="11" fill="#1e293b">容量：有限（128K-1M）</text>
+                    <text x="125" y="200" text-anchor="middle" font-size="11" fill="#1e293b">检索：无，全部塞进去</text>
+                    <text x="125" y="220" text-anchor="middle" font-size="11" fill="#1e293b">生命周期：随对话消失</text>
+                    <text x="125" y="240" text-anchor="middle" font-size="11" fill="#1e293b">管理：系统自动管理</text>
+                </g>
+
+                <!-- Arrow -->
+                <text x="625" y="145" font-size="30" fill="#94a3b8">→</text>
+                <text x="615" y="170" font-size="9" fill="#94a3b8">OpenCode</text>
+
+                <!-- OpenCode 方案 -->
+                <g transform="translate(670, 10)">
+                    <rect width="170" height="250" rx="16" fill="#ecfdf5" stroke="#6ee7b7" stroke-width="3"/>
+                    <text x="85" y="35" text-anchor="middle" font-weight="700" font-size="15" fill="#065f46">OpenCode</text>
+                    <text x="85" y="55" text-anchor="middle" font-size="11" fill="#64748b">管理这块黑板</text>
+                    <text x="85" y="90" text-anchor="middle" font-size="11" fill="#065f46">✓ 写入时精心编排</text>
+                    <text x="85" y="115" text-anchor="middle" font-size="11" fill="#065f46">✓ 太长时智能压缩</text>
+                    <text x="85" y="140" text-anchor="middle" font-size="11" fill="#065f46">✓ 过时信息及时清理</text>
+                    <text x="85" y="165" text-anchor="middle" font-size="11" fill="#065f46">✓ 关键知识持久保存</text>
+                    <text x="85" y="195" text-anchor="middle" font-size="10" fill="#065f46" font-weight="600">核心思路：</text>
+                    <text x="85" y="215" text-anchor="middle" font-size="10" fill="#065f46">让对话历史本身</text>
+                    <text x="85" y="233" text-anchor="middle" font-size="10" fill="#065f46" font-weight="600">成为最好的记忆</text>
+                </g>
+            </svg>
+        </div>
+
+        <div class="box box-blue">
+            <strong>为什么 OpenCode 不用向量数据库？</strong><br><br>
+            向量数据库做记忆检索存在根本问题：LLM 需要的是<strong>结构化、时序化的上下文</strong>，而不是语义相似性检索。<br>
+            "我们做了什么、改了哪些文件、下一步干什么"——这些信息用对话历史自然表达，向量检索反而丢失了时序和因果关系。<br><br>
+            <strong>OpenCode 的选择：</strong>让对话历史本身就是记忆。当它太长时，用 LLM 自己压缩成摘要（摘要也是对话的一部分）。模型天然能理解"之前的摘要 + 最近的对话"。
+        </div>
+    </div>
+
+    <!-- Section 2: 三层架构 -->
+    <div class="section" id="s2">
+        <h2>二、记忆三层架构</h2>
+
+        <div class="diagram-container" style="padding: 25px;">
+            <svg width="800" height="400" viewBox="0 0 800 400">
+                <!-- Layer 3: Long-term -->
+                <g transform="translate(50, 10)">
+                    <rect width="700" height="110" rx="14" fill="#ede9fe" stroke="#a78bfa" stroke-width="2"/>
+                    <text x="20" y="30" font-weight="700" font-size="15" fill="#5b21b6">长期记忆 — 跨会话持久存在</text>
+                    <text x="20" y="52" font-size="12" fill="#64748b">生命周期：永久（文件级存储）| 注入方式：每次 loop 构建 System Prompt 时</text>
+                    <!-- Items -->
+                    <g transform="translate(20, 65)">
+                        <rect width="140" height="35" rx="8" fill="#7c3aed"/>
+                        <text x="70" y="22" text-anchor="middle" font-size="11" fill="white" font-weight="600">AGENTS.md</text>
+                    </g>
+                    <g transform="translate(170, 65)">
+                        <rect width="140" height="35" rx="8" fill="#7c3aed"/>
+                        <text x="70" y="22" text-anchor="middle" font-size="11" fill="white" font-weight="600">CLAUDE.md</text>
+                    </g>
+                    <g transform="translate(320, 65)">
+                        <rect width="200" height="35" rx="8" fill="#7c3aed"/>
+                        <text x="100" y="22" text-anchor="middle" font-size="11" fill="white" font-weight="600">config.instructions（URL/文件）</text>
+                    </g>
+                    <g transform="translate(530, 65)">
+                        <rect width="150" height="35" rx="8" fill="#7c3aed"/>
+                        <text x="75" y="22" text-anchor="middle" font-size="11" fill="white" font-weight="600">~/.claude/CLAUDE.md</text>
+                    </g>
+                </g>
+
+                <!-- Layer 2: Mid-term -->
+                <g transform="translate(50, 135)">
+                    <rect width="700" height="110" rx="14" fill="#dbeafe" stroke="#93c5fd" stroke-width="2"/>
+                    <text x="20" y="30" font-weight="700" font-size="15" fill="#1e40af">中期记忆 — 同一会话内跨轮次持续可见</text>
+                    <text x="20" y="52" font-size="12" fill="#64748b">生命周期：Session 内 | 注入方式：filterCompacted 自动加载</text>
+                    <g transform="translate(20, 65)">
+                        <rect width="180" height="35" rx="8" fill="#2563eb"/>
+                        <text x="90" y="22" text-anchor="middle" font-size="11" fill="white" font-weight="600">Compaction 摘要</text>
+                    </g>
+                    <g transform="translate(210, 65)">
+                        <rect width="180" height="35" rx="8" fill="#2563eb"/>
+                        <text x="90" y="22" text-anchor="middle" font-size="11" fill="white" font-weight="600">最近的原始消息</text>
+                    </g>
+                    <g transform="translate(400, 65)">
+                        <rect width="280" height="35" rx="8" fill="#2563eb"/>
+                        <text x="140" y="22" text-anchor="middle" font-size="11" fill="white" font-weight="600">未被 Prune 裁剪的工具输出</text>
+                    </g>
+                </g>
+
+                <!-- Layer 1: Short-term -->
+                <g transform="translate(50, 260)">
+                    <rect width="700" height="110" rx="14" fill="#d1fae5" stroke="#6ee7b7" stroke-width="2"/>
+                    <text x="20" y="30" font-weight="700" font-size="15" fill="#065f46">短期记忆 — 当前上下文窗口中的原始消息</text>
+                    <text x="20" y="52" font-size="12" fill="#64748b">生命周期：当前轮 LLM 调用 | 注入方式：toModelMessages 转换</text>
+                    <g transform="translate(20, 65)">
+                        <rect width="160" height="35" rx="8" fill="#10b981"/>
+                        <text x="80" y="22" text-anchor="middle" font-size="11" fill="white" font-weight="600">用户输入文本</text>
+                    </g>
+                    <g transform="translate(190, 65)">
+                        <rect width="160" height="35" rx="8" fill="#10b981"/>
+                        <text x="80" y="22" text-anchor="middle" font-size="11" fill="white" font-weight="600">Assistant 回复</text>
+                    </g>
+                    <g transform="translate(360, 65)">
+                        <rect width="160" height="35" rx="8" fill="#10b981"/>
+                        <text x="80" y="22" text-anchor="middle" font-size="11" fill="white" font-weight="600">工具调用结果</text>
+                    </g>
+                    <g transform="translate(530, 65)">
+                        <rect width="150" height="35" rx="8" fill="#10b981"/>
+                        <text x="75" y="22" text-anchor="middle" font-size="11" fill="white" font-weight="600">Reasoning 推理</text>
+                    </g>
+                </g>
+
+                <!-- Arrows between layers -->
+                <g transform="translate(400, 120)">
+                    <text x="0" y="12" text-anchor="middle" font-size="10" fill="#7c3aed" font-weight="600">▼ 每轮注入 System Prompt</text>
+                </g>
+                <g transform="translate(400, 245)">
+                    <text x="0" y="12" text-anchor="middle" font-size="10" fill="#2563eb" font-weight="600">▼ Compaction 压缩后变为中期</text>
+                </g>
+            </svg>
+        </div>
+
+        <div class="box box-green">
+            <strong>三层架构的精妙之处：</strong>每一层用不同的技术，解决不同的问题——<br>
+            &bull; <strong>长期记忆</strong>用<strong>文件</strong>解决"跨会话知识"（代码规范、项目约定）<br>
+            &bull; <strong>中期记忆</strong>用<strong>LLM 摘要</strong>解决"对话太长"（之前的工作总结）<br>
+            &bull; <strong>短期记忆</strong>用<strong>原始消息</strong>解决"当前工作细节"（最近读的文件、写的代码）
+        </div>
+    </div>
+
+    <!-- Section 3: 五大机制 -->
+    <div class="section" id="s3">
+        <h2>三、五大机制与介入时序</h2>
+
+        <p>OpenCode 的 Session Loop 是一个 <code>while(true)</code> 循环，每轮循环代表一次 LLM 交互。5 个记忆机制在循环的不同时间点介入：</p>
+
+        <div class="diagram-container" style="padding: 25px;">
+            <svg width="820" height="520" viewBox="0 0 820 520">
+                <!-- Loop container -->
+                <rect x="30" y="30" width="760" height="480" rx="18" fill="none" stroke="#94a3b8" stroke-width="2" stroke-dasharray="8 4"/>
+                <text x="60" y="25" font-size="13" fill="#64748b" font-weight="600">while(true) — Session Loop</text>
+
+                <!-- Step 1: filterCompacted -->
+                <g transform="translate(70, 60)">
+                    <rect width="680" height="65" rx="12" fill="#dbeafe" stroke="#93c5fd" stroke-width="2"/>
+                    <circle cx="30" cy="33" r="18" fill="#2563eb"/>
+                    <text x="30" y="38" text-anchor="middle" font-size="14" fill="white" font-weight="700">1</text>
+                    <text x="70" y="28" font-weight="700" font-size="14" fill="#1e40af">filterCompacted() — 加载消息时裁剪历史</text>
+                    <text x="70" y="50" font-size="12" fill="#64748b">从 DB 倒序读取消息，遇到完成的 Compaction 就停止。只保留摘要 + 之后的消息。</text>
+                </g>
+
+                <!-- Arrow -->
+                <text x="410" y="145" text-anchor="middle" font-size="18" fill="#94a3b8">↓</text>
+
+                <!-- Step 2: Instruction -->
+                <g transform="translate(70, 155)">
+                    <rect width="680" height="65" rx="12" fill="#ede9fe" stroke="#a78bfa" stroke-width="2"/>
+                    <circle cx="30" cy="33" r="18" fill="#7c3aed"/>
+                    <text x="30" y="38" text-anchor="middle" font-size="14" fill="white" font-weight="700">2</text>
+                    <text x="70" y="28" font-weight="700" font-size="14" fill="#5b21b6">InstructionPrompt.system() — 构建 System Prompt</text>
+                    <text x="70" y="50" font-size="12" fill="#64748b">扫描 AGENTS.md / CLAUDE.md / config.instructions，读取内容注入 system prompt。</text>
+                </g>
+
+                <!-- Arrow -->
+                <text x="410" y="240" text-anchor="middle" font-size="18" fill="#94a3b8">↓</text>
+
+                <!-- Step 3: LLM call -->
+                <g transform="translate(70, 248)">
+                    <rect width="680" height="65" rx="12" fill="#d1fae5" stroke="#6ee7b7" stroke-width="2"/>
+                    <circle cx="30" cy="33" r="18" fill="#10b981"/>
+                    <text x="30" y="38" text-anchor="middle" font-size="14" fill="white" font-weight="700">3</text>
+                    <text x="70" y="28" font-weight="700" font-size="14" fill="#065f46">processor.process() — 调用 LLM + Summary 异步触发</text>
+                    <text x="70" y="50" font-size="12" fill="#64748b">step === 1 时异步调用 SessionSummary.summarize()，计算 git diff 作为变更摘要。</text>
+                </g>
+
+                <!-- Arrow -->
+                <text x="410" y="333" text-anchor="middle" font-size="18" fill="#94a3b8">↓</text>
+
+                <!-- Step 4: isOverflow + Compaction -->
+                <g transform="translate(70, 340)">
+                    <rect width="680" height="65" rx="12" fill="#fef3c7" stroke="#fbbf24" stroke-width="2"/>
+                    <circle cx="30" cy="33" r="18" fill="#f59e0b"/>
+                    <text x="30" y="38" text-anchor="middle" font-size="14" fill="white" font-weight="700">4</text>
+                    <text x="70" y="28" font-weight="700" font-size="14" fill="#92400e">isOverflow() → Compaction — 溢出检测 + 智能压缩</text>
+                    <text x="70" y="50" font-size="12" fill="#64748b">检查 token 用量是否接近上下文上限。如果超限，调用 LLM 将旧对话压缩为结构化摘要。</text>
+                </g>
+
+                <!-- Arrow -->
+                <text x="410" y="425" text-anchor="middle" font-size="18" fill="#94a3b8">↓ loop 结束</text>
+
+                <!-- Step 5: Prune -->
+                <g transform="translate(70, 440)">
+                    <rect width="680" height="55" rx="12" fill="#fee2e2" stroke="#fca5a5" stroke-width="2"/>
+                    <circle cx="30" cy="28" r="18" fill="#ef4444"/>
+                    <text x="30" y="33" text-anchor="middle" font-size="14" fill="white" font-weight="700">5</text>
+                    <text x="70" y="25" font-weight="700" font-size="14" fill="#991b1b">Prune() — 工具输出裁剪（不调用 LLM）</text>
+                    <text x="70" y="45" font-size="12" fill="#64748b">整个 loop 结束后，标记远古工具输出为 "[Old tool result content cleared]"，释放空间。</text>
+                </g>
+            </svg>
+        </div>
+
+        <table>
+            <tr><th>机制</th><th>核心文件</th><th>触发时机</th><th>是否调 LLM</th><th>目的</th></tr>
+            <tr>
+                <td><strong>filterCompacted</strong></td>
+                <td><code>message-v2.ts:814</code></td>
+                <td>每轮 loop 开始</td>
+                <td>否</td>
+                <td>跳过摘要前的旧消息</td>
+            </tr>
+            <tr>
+                <td><strong>Instruction</strong></td>
+                <td><code>instruction.ts</code></td>
+                <td>构建 system prompt</td>
+                <td>否</td>
+                <td>注入跨会话持久知识</td>
+            </tr>
+            <tr>
+                <td><strong>Summary</strong></td>
+                <td><code>summary.ts</code></td>
+                <td>step === 1 时异步</td>
+                <td>否</td>
+                <td>计算代码变更 diff</td>
+            </tr>
+            <tr>
+                <td><strong>Compaction</strong></td>
+                <td><code>compaction.ts</code></td>
+                <td>LLM 返回后检查</td>
+                <td><strong>是</strong></td>
+                <td>用 LLM 将旧对话压缩为摘要</td>
+            </tr>
+            <tr>
+                <td><strong>Prune</strong></td>
+                <td><code>compaction.ts:58</code></td>
+                <td>整个 loop 结束</td>
+                <td>否</td>
+                <td>标记远古工具输出为已清理</td>
+            </tr>
+        </table>
+    </div>
+
+    <!-- Section 4: Instruction -->
+    <div class="section" id="s4">
+        <h2>四、机制一：Instruction — 长期记忆注入</h2>
+
+        <h3>4.1 工作原理</h3>
+        <p>Instruction 是 OpenCode 的"长期记忆"——它从文件系统中读取持久化的指令文件，注入到每轮 LLM 调用的 System Prompt 中。这样即使跨会话，Agent 也能"记住"项目的编码规范、架构约定等。</p>
+
+        <div class="step">
+            <div class="num">1</div>
+            <div class="content">
+                <div class="title">扫描指令文件路径</div>
+                <div class="file">instruction.ts → systemPaths()</div>
+                <div class="desc">
+                    按优先级查找：项目级 <code>AGENTS.md</code> → <code>CLAUDE.md</code> → <code>CONTEXT.md</code>（deprecated）<br>
+                    然后查找全局级：<code>~/.config/opencode/AGENTS.md</code> → <code>~/.claude/CLAUDE.md</code><br>
+                    最后查找 <code>config.instructions</code> 中的自定义路径和 URL。
+                </div>
+            </div>
+        </div>
+
+        <div class="step green">
+            <div class="num">2</div>
+            <div class="content">
+                <div class="title">读取文件内容</div>
+                <div class="file">instruction.ts → system()</div>
+                <div class="desc">读取所有找到的文件内容，HTTP URL 也会 fetch（5秒超时）。每段内容前缀 <code>"Instructions from: {path}"</code> 让 LLM 知道来源。</div>
+            </div>
+        </div>
+
+        <div class="step purple">
+            <div class="num">3</div>
+            <div class="content">
+                <div class="title">注入 System Prompt</div>
+                <div class="file">prompt.ts:652</div>
+                <div class="desc">
+                    与 SystemPrompt.environment() 合并，形成完整的 system prompt：<br>
+                    <code>const system = [...SystemPrompt.environment(model), ...InstructionPrompt.system()]</code>
+                </div>
+            </div>
+        </div>
+
+        <h3>4.2 智能子目录指令发现</h3>
+        <p>Instruction 还有一个精巧的子目录发现机制：当 LLM 读取某个文件时，<code>resolve()</code> 会自动向上扫描目录树，找到该文件所在子目录的 <code>AGENTS.md</code>：</p>
+
+<pre>
+<span style="color:#94a3b8;">// instruction.ts:168-191</span>
+<span style="color:#94a3b8;">// 当 Agent 读取 src/db/users.ts 时，自动加载：</span>
+<span style="color:#94a3b8;">//   src/db/AGENTS.md     (如果存在)</span>
+<span style="color:#94a3b8;">//   src/AGENTS.md        (如果存在)</span>
+<span style="color:#94a3b8;">// 但跳过 systemPaths() 已加载的全局指令</span>
+
+export async function resolve(messages, filepath, messageID) {
+    const system = await systemPaths()       <span style="color:#94a3b8;">// 已加载的全局指令</span>
+    const already = loaded(messages)          <span style="color:#94a3b8;">// 历史中已读取的文件</span>
+    const results = []
+
+    let current = path.dirname(filepath)
+    const root = path.resolve(Instance.directory)
+
+    <span style="color:#fbbf24;">while (current.startsWith(root) && current !== root) {</span>
+        const found = await find(current)     <span style="color:#94a3b8;">// 查找 AGENTS.md / CLAUDE.md</span>
+        if (found && !system.has(found) && !already.has(found)
+            && !isClaimed(messageID, found)) {
+            claim(messageID, found)            <span style="color:#94a3b8;">// 防重复注入</span>
+            results.push({ filepath: found, content: ... })
+        }
+        current = path.dirname(current)       <span style="color:#94a3b8;">// 向上遍历</span>
+    }
+    return results
+}
+</pre>
+
+        <div class="box box-purple">
+            <strong>claim 机制的精妙之处：</strong><br>
+            &bull; <code>isClaimed(messageID, filepath)</code> 防止同一条指令在同一轮对话中被重复注入<br>
+            &bull; <code>loaded(messages)</code> 检查历史中已被 Read 工具读取过的指令文件，避免冗余<br>
+            &bull; <code>clear(messageID)</code> 在每轮 LLM 调用结束后清理 claim 记录<br>
+            → <strong>按需加载 + 去重保护</strong>，而不是暴力全量注入
+        </div>
+    </div>
+
+    <!-- Section 5: filterCompacted -->
+    <div class="section" id="s5">
+        <h2>五、机制二：filterCompacted — 记忆回放</h2>
+
+        <h3>5.1 核心问题</h3>
+        <p>当对话很长并经过多次 Compaction 后，DB 中存储了数百条消息。如果全部加载发送给 LLM，既浪费 token 又包含过时信息。需要一种方式：<strong>"从最近的摘要开始，只加载摘要之后的消息"</strong>。</p>
+
+        <h3>5.2 算法实现</h3>
+
+<pre>
+<span style="color:#94a3b8;">// message-v2.ts:814-830</span>
+
+export async function filterCompacted(stream) {
+    const result = []
+    const completed = new Set&lt;string&gt;()
+
+    <span style="color:#fbbf24;">for await (const msg of stream) {</span>           <span style="color:#94a3b8;">// stream 是倒序的（最新→最旧）</span>
+        result.push(msg)
+
+        <span style="color:#94a3b8;">// 遇到已完成的 Compaction 请求 → 停止！</span>
+        if (msg.info.role === "user"
+            && completed.has(msg.info.id)
+            && msg.parts.some(part => part.type === "compaction"))
+            <span style="color:#34d399; font-weight:bold;">break</span>                               <span style="color:#94a3b8;">// ← 这就是"记忆边界"</span>
+
+        <span style="color:#94a3b8;">// 记录成功完成的 Compaction</span>
+        if (msg.info.role === "assistant"
+            && msg.info.summary              <span style="color:#94a3b8;">// 这是 Compaction 生成的摘要</span>
+            && msg.info.finish               <span style="color:#94a3b8;">// 生成完成了</span>
+            && !msg.info.error)              <span style="color:#94a3b8;">// 没有出错</span>
+            completed.add(msg.info.parentID) <span style="color:#94a3b8;">// 记录对应的请求 ID</span>
+    }
+
+    result.reverse()                          <span style="color:#94a3b8;">// 恢复为正序（旧→新）</span>
+    return result
+}
+</pre>
+
+        <div class="diagram-container" style="padding: 25px;">
+            <svg width="750" height="310" viewBox="0 0 750 310">
+                <text x="375" y="25" text-anchor="middle" font-weight="700" font-size="14" fill="#1e293b">filterCompacted 工作原理（倒序遍历，遇到 Compaction 停止）</text>
+
+                <!-- Message timeline -->
+                <g transform="translate(30, 50)">
+                    <!-- Messages from old to new -->
+                    <rect x="0" y="0" width="690" height="40" rx="8" fill="#fee2e2" stroke="#fca5a5" stroke-width="1.5" opacity="0.5"/>
+                    <text x="10" y="25" font-size="11" fill="#991b1b">User: 帮我重构认证模块</text>
+                    <text x="630" y="25" font-size="10" fill="#991b1b">msg_001</text>
+
+                    <rect x="0" y="48" width="690" height="40" rx="8" fill="#fee2e2" stroke="#fca5a5" stroke-width="1.5" opacity="0.5"/>
+                    <text x="10" y="73" font-size="11" fill="#991b1b">Assistant: 好的，我来分析...</text>
+                    <text x="630" y="73" font-size="10" fill="#991b1b">msg_002</text>
+
+                    <rect x="0" y="96" width="690" height="40" rx="8" fill="#fef3c7" stroke="#fbbf24" stroke-width="2"/>
+                    <text x="10" y="121" font-size="11" fill="#92400e" font-weight="600">User: [Compaction Part] ← 遍历到这里 STOP!</text>
+                    <text x="630" y="121" font-size="10" fill="#92400e">msg_003</text>
+
+                    <rect x="0" y="144" width="690" height="40" rx="8" fill="#dbeafe" stroke="#93c5fd" stroke-width="2"/>
+                    <text x="10" y="169" font-size="11" fill="#1e40af" font-weight="600">Assistant: [Summary] 我们之前完成了认证模块重构...</text>
+                    <text x="630" y="169" font-size="10" fill="#1e40af">msg_004</text>
+
+                    <rect x="0" y="192" width="690" height="40" rx="8" fill="#d1fae5" stroke="#6ee7b7" stroke-width="1.5"/>
+                    <text x="10" y="217" font-size="11" fill="#065f46">User: 现在帮我加单元测试</text>
+                    <text x="630" y="217" font-size="10" fill="#065f46">msg_005</text>
+
+                    <rect x="0" y="240" width="690" height="35" rx="8" fill="#d1fae5" stroke="#6ee7b7" stroke-width="1.5"/>
+                    <text x="10" y="263" font-size="11" fill="#065f46">Assistant: 好的，我来写测试...</text>
+                    <text x="630" y="263" font-size="10" fill="#065f46">msg_006</text>
+
+                    <!-- Stop marker -->
+                    <line x1="-15" y1="96" x2="-15" y2="136" stroke="#ef4444" stroke-width="4"/>
+                    <text x="-25" y="85" text-anchor="end" font-size="10" fill="#ef4444" font-weight="600">STOP</text>
+
+                    <!-- Keep marker -->
+                    <line x1="-15" y1="144" x2="-15" y2="275" stroke="#10b981" stroke-width="4"/>
+                    <text x="-25" y="215" text-anchor="end" font-size="10" fill="#10b981" font-weight="600">KEEP</text>
+                </g>
+
+                <!-- Legend -->
+                <g transform="translate(30, 295)">
+                    <rect width="15" height="12" rx="3" fill="#fee2e2" stroke="#fca5a5"/>
+                    <text x="22" y="11" font-size="10" fill="#64748b">被丢弃的旧消息</text>
+                    <rect x="160" width="15" height="12" rx="3" fill="#dbeafe" stroke="#93c5fd"/>
+                    <text x="182" y="11" font-size="10" fill="#64748b">Compaction 摘要（保留）</text>
+                    <rect x="370" width="15" height="12" rx="3" fill="#d1fae5" stroke="#6ee7b7"/>
+                    <text x="392" y="11" font-size="10" fill="#64748b">摘要后的新消息（保留）</text>
+                </g>
+            </svg>
+        </div>
+
+        <div class="box box-blue">
+            <strong>设计精妙点：</strong><br>
+            &bull; 利用 <code>parentID</code> 关联 User 消息和 Compaction 摘要，精准定位"记忆边界"<br>
+            &bull; <code>summary</code> 标志位 + <code>finish</code> + <code>!error</code> 三重条件确保只信任成功完成的压缩<br>
+            &bull; 倒序遍历 → 遇到边界 break → reverse() 恢复正序，简洁高效<br>
+            &bull; <strong>效果</strong>：无论历史多长，只加载"最近的摘要 + 之后的原始消息"
+        </div>
+    </div>
+
+    <!-- Section 6: Compaction -->
+    <div class="section" id="s6">
+        <h2>六、机制三：Compaction — 智能压缩</h2>
+
+        <p>Compaction 是记忆系统中最"重"的机制——它是<strong>唯一需要调用 LLM 的</strong>。当上下文窗口即将溢出时，让 LLM 自己总结之前的对话，生成结构化摘要。</p>
+
+        <h3>6.1 触发条件</h3>
+
+<pre>
+<span style="color:#94a3b8;">// compaction.ts:30-48</span>
+
+const COMPACTION_BUFFER = 20_000  <span style="color:#94a3b8;">// 预留 20K token 缓冲</span>
+
+export async function isOverflow(input) {
+    const config = await Config.get()
+    if (config.compaction?.auto === false) return false  <span style="color:#94a3b8;">// 可关闭</span>
+
+    const count = input.tokens.total
+        || input.tokens.input + input.tokens.output
+           + input.tokens.cache.read + input.tokens.cache.write
+
+    const reserved = config.compaction?.reserved
+        ?? Math.min(COMPACTION_BUFFER, maxOutputTokens(model))
+
+    const usable = input.model.limit.input
+        ? input.model.limit.input - reserved
+        : context - maxOutputTokens(model)
+
+    <span style="color:#fbbf24; font-weight:bold;">return count >= usable</span>  <span style="color:#94a3b8;">// token 用量 >= 可用上限？</span>
+}
+</pre>
+
+        <h3>6.2 Compaction 摘要模板</h3>
+        <p>当触发 Compaction 时，系统向 LLM 发送一段精心设计的提示词，指导它生成结构化摘要：</p>
+
+<pre>
+<span style="color:#94a3b8;">// compaction.ts:173-199 — 默认 Compaction Prompt</span>
+
+"Provide a detailed prompt for continuing our conversation above.
+Focus on information that would be helpful for continuing the conversation,
+including what we did, what we're doing, which files we're working on,
+and what we're going to do next.
+
+The summary that you construct will be used so that <span style="color:#fbbf24;">another agent can read
+it and continue the work</span>.
+
+When constructing the summary, try to stick to this template:
+---
+## Goal
+[What goal(s) is the user trying to accomplish?]
+
+## Instructions
+- [What important instructions did the user give you]
+- [If there is a plan or spec, include information about it]
+
+## Discoveries
+[What notable things were learned during this conversation]
+
+## Accomplished
+[What work has been completed, in progress, and left?]
+
+## Relevant files / directories
+[Structured list of relevant files]
+---"
+</pre>
+
+        <h3>6.3 完整的 Compaction 流程</h3>
+
+        <div class="step">
+            <div class="num">1</div>
+            <div class="content">
+                <div class="title">检测溢出</div>
+                <div class="desc"><code>isOverflow()</code> 检查最后一轮 LLM 返回的 token 用量。如果接近上限 → 创建 Compaction 请求。</div>
+            </div>
+        </div>
+
+        <div class="step yellow">
+            <div class="num">2</div>
+            <div class="content">
+                <div class="title">创建 Compaction 消息</div>
+                <div class="file">compaction.ts:296-327 → create()</div>
+                <div class="desc">写入一条 User 消息，包含 <code>CompactionPart</code>（类型标记，不是实际文本）。这条消息在 <code>toModelMessages</code> 中会被转换为 <code>"What did we do so far?"</code>。</div>
+            </div>
+        </div>
+
+        <div class="step purple">
+            <div class="num">3</div>
+            <div class="content">
+                <div class="title">使用 compaction Agent 生成摘要</div>
+                <div class="file">compaction.ts:131-166</div>
+                <div class="desc">
+                    获取 <code>compaction</code> Agent（专门的角色配置），创建摘要消息。<br>
+                    发送<strong>全部历史消息</strong> + Compaction Prompt → LLM 生成结构化摘要。
+                </div>
+            </div>
+        </div>
+
+        <div class="step green">
+            <div class="num">4</div>
+            <div class="content">
+                <div class="title">自动续传（Auto-Continue）</div>
+                <div class="file">compaction.ts:235-289</div>
+                <div class="desc">
+                    压缩完成后，如果是自动触发的（<code>auto: true</code>），系统自动追加一条 User 消息：<br>
+                    <code>"Continue if you have next steps, or stop and ask for clarification if you are unsure how to proceed."</code><br>
+                    → LLM 读到摘要 + 这条指令后，会自然地继续未完成的工作。
+                </div>
+            </div>
+        </div>
+
+        <div class="step red">
+            <div class="num">5</div>
+            <div class="content">
+                <div class="title">溢出恢复（Overflow Recovery）</div>
+                <div class="file">compaction.ts:112-128</div>
+                <div class="desc">
+                    如果 Compaction 本身也溢出（对话太长了！），系统会尝试<strong>去掉最后一条用户消息</strong>，<br>
+                    从更早的位置开始压缩。还会移除媒体附件（图片/PDF）减少 token 用量。
+                </div>
+            </div>
+        </div>
+
+        <div class="box box-yellow">
+            <strong>Compaction 的优雅之处：</strong><br>
+            &bull; <strong>用 LLM 总结 LLM</strong>：不是简单的截断或丢弃，而是让模型自己提炼结构化信息<br>
+            &bull; <strong>摘要也是对话</strong>：压缩结果作为一条 assistant 消息存入 DB，filterCompacted 自然能找到它<br>
+            &bull; <strong>模板引导</strong>：Goal → Instructions → Discoveries → Accomplished → Files，确保不丢关键信息<br>
+            &bull; <strong>自动续传</strong>：压缩后 LLM 不会"发呆"，会自动继续未完成的任务<br>
+            &bull; <strong>插件扩展</strong>：<code>Plugin.trigger("experimental.session.compacting")</code> 允许插件自定义压缩逻辑
+        </div>
+    </div>
+
+    <!-- Section 7: Prune -->
+    <div class="section" id="s7">
+        <h2>七、机制四：Prune — 工具输出裁剪</h2>
+
+        <p>Prune 是一种<strong>廉价的、不调用 LLM 的</strong>记忆管理策略。它不做复杂的总结，只是简单地把远古的工具输出标记为"已清理"。</p>
+
+        <h3>7.1 算法</h3>
+
+<pre>
+<span style="color:#94a3b8;">// compaction.ts:50-98</span>
+
+const PRUNE_MINIMUM  = 20_000   <span style="color:#94a3b8;">// 最少要裁剪 20K token</span>
+const PRUNE_PROTECT  = 40_000   <span style="color:#94a3b8;">// 保护最近的 40K token 不裁剪</span>
+const PRUNE_PROTECTED_TOOLS = ["skill"]  <span style="color:#94a3b8;">// skill 工具永不裁剪</span>
+
+export async function prune(input) {
+    const msgs = await Session.messages({ sessionID })
+    let total = 0
+    const toPrune = []
+    let turns = 0
+
+    <span style="color:#94a3b8;">// 从最新消息向旧消息遍历</span>
+    for (let i = msgs.length - 1; i >= 0; i--) {
+        const msg = msgs[i]
+        if (msg.info.role === "user") turns++
+        if (turns < 2) continue          <span style="color:#94a3b8;">// 跳过最近的 2 轮对话</span>
+        if (msg.info.role === "assistant" && msg.info.summary) break  <span style="color:#94a3b8;">// 遇到摘要停止</span>
+
+        for (let j = msg.parts.length - 1; j >= 0; j--) {
+            const part = msg.parts[j]
+            if (part.type === "tool" && part.state.status === "completed") {
+                if (PRUNE_PROTECTED_TOOLS.includes(part.tool)) continue  <span style="color:#94a3b8;">// 受保护工具跳过</span>
+                if (part.state.time.compacted) break  <span style="color:#94a3b8;">// 已裁剪的停止</span>
+
+                const estimate = Token.estimate(part.state.output)
+                total += estimate
+                if (total > PRUNE_PROTECT)     <span style="color:#94a3b8;">// 超过保护阈值</span>
+                    toPrune.push(part)          <span style="color:#94a3b8;">// → 标记裁剪</span>
+            }
+        }
+    }
+
+    <span style="color:#94a3b8;">// 只有裁剪量 > 20K 才执行（避免无意义的微小裁剪）</span>
+    if (pruned > PRUNE_MINIMUM) {
+        for (const part of toPrune) {
+            part.state.time.compacted = Date.now()  <span style="color:#fbbf24;">// ← 打上时间戳</span>
+            await Session.updatePart(part)
+        }
+    }
+}
+</pre>
+
+        <h3>7.2 裁剪效果</h3>
+        <p>被裁剪的工具输出不会从 DB 中删除，但在发送给 LLM 时被替换为占位文本：</p>
+
+<pre>
+<span style="color:#94a3b8;">// message-v2.ts:637-638 — toModelMessages 中的处理</span>
+
+const outputText = part.state.time.compacted
+    ? <span style="color:#34d399;">"[Old tool result content cleared]"</span>   <span style="color:#94a3b8;">// ← 裁剪后</span>
+    : part.state.output                        <span style="color:#94a3b8;">// ← 未裁剪</span>
+
+const attachments = part.state.time.compacted
+    ? []                                       <span style="color:#94a3b8;">// 裁剪后附件也清除</span>
+    : (part.state.attachments ?? [])
+</pre>
+
+        <div class="box box-green">
+            <strong>Prune 的设计哲学：空间换时间</strong><br>
+            &bull; <strong>不调用 LLM</strong>：零成本，纯数据库操作<br>
+            &bull; <strong>保护最近 40K token</strong>：刚用的工具输出可能还有参考价值<br>
+            &bull; <strong>保护 skill 工具</strong>：技能加载信息不应丢失<br>
+            &bull; <strong>20K 最低阈值</strong>：太小的裁剪不值得执行<br>
+            &bull; <strong>标记而非删除</strong>：<code>time.compacted</code> 时间戳可以追溯
+        </div>
+    </div>
+
+    <!-- Section 8: Summary -->
+    <div class="section" id="s8">
+        <h2>八、机制五：Summary — 代码变更追踪</h2>
+
+        <p>Summary 不是"记忆"本身，但它是记忆系统的<strong>辅助层</strong>——它追踪每个 Session 中实际发生了哪些代码变更，让用户和 Agent 都能快速回顾"我们改了什么"。</p>
+
+        <h3>8.1 工作原理</h3>
+
+<pre>
+<span style="color:#94a3b8;">// summary.ts:69-98</span>
+
+export const summarize = fn(..., async (input) => {
+    const all = await Session.messages({ sessionID })
+
+    await Promise.all([
+        <span style="color:#fbbf24;">summarizeSession</span>({ sessionID, messages: all }),    <span style="color:#94a3b8;">// 整个 session 的 diff</span>
+        <span style="color:#fbbf24;">summarizeMessage</span>({ messageID, messages: all }),    <span style="color:#94a3b8;">// 单条消息的 diff</span>
+    ])
+})
+
+async function summarizeSession(input) {
+    const diffs = await computeDiff({ messages })   <span style="color:#94a3b8;">// 从 snapshot 计算 git diff</span>
+    await Session.setSummary({
+        sessionID,
+        summary: {
+            additions: diffs.reduce((sum, x) => sum + x.additions, 0),
+            deletions: diffs.reduce((sum, x) => sum + x.deletions, 0),
+            files: diffs.length,
+        },
+    })
+}
+
+<span style="color:#94a3b8;">// computeDiff: 找到最早的 step-start snapshot 和最新的 step-finish snapshot</span>
+<span style="color:#94a3b8;">// 调用 Snapshot.diffFull(from, to) 计算完整 diff</span>
+</pre>
+
+        <div class="box box-cyan">
+            <strong>Summary 的价值：</strong><br>
+            &bull; 用户可以在 UI 上看到"本次会话改了哪些文件、加了多少行、删了多少行"<br>
+            &bull; 每条用户消息也关联了 diff，可以看到"这条指令引发了哪些变更"<br>
+            &bull; 利用 Git Snapshot 机制，不依赖 LLM，零成本精确计算
+        </div>
+    </div>
+
+    <!-- Section 9: 协作流程 -->
+    <div class="section" id="s9">
+        <h2>九、五大机制的协作流程</h2>
+
+        <p>以下是一个完整 Session 生命周期中，5 个机制如何协作的时序图：</p>
+
+        <div class="diagram-container" style="padding: 25px;">
+            <svg width="820" height="600" viewBox="0 0 820 600">
+                <!-- Time axis -->
+                <line x1="80" y1="40" x2="80" y2="580" stroke="#e2e8f0" stroke-width="2"/>
+                <text x="40" y="30" text-anchor="middle" font-size="12" fill="#64748b" font-weight="600">时间</text>
+
+                <!-- Phase 1: Session start -->
+                <g transform="translate(100, 50)">
+                    <rect width="700" height="70" rx="10" fill="#f8fafc" stroke="#e2e8f0"/>
+                    <text x="15" y="25" font-weight="700" font-size="13" fill="#1e293b">Session 开始 — 用户发送第一条消息</text>
+                    <text x="15" y="48" font-size="11" fill="#64748b">
+                        ① filterCompacted() 加载全部消息（还没有 Compaction，所以全量加载）
+                    </text>
+                    <text x="15" y="63" font-size="11" fill="#64748b">
+                        ② Instruction.system() 扫描并注入 AGENTS.md → System Prompt
+                    </text>
+                </g>
+
+                <!-- Phase 2: Normal loop -->
+                <g transform="translate(100, 135)">
+                    <rect width="700" height="70" rx="10" fill="#ecfdf5" stroke="#6ee7b7"/>
+                    <text x="15" y="25" font-weight="700" font-size="13" fill="#065f46">正常 Loop（多轮 LLM 交互）</text>
+                    <text x="15" y="48" font-size="11" fill="#64748b">
+                        每轮：filterCompacted → Instruction → processor.process() → 检查溢出
+                    </text>
+                    <text x="15" y="63" font-size="11" fill="#64748b">
+                        step === 1 时：Summary.summarize() 异步触发（计算 git diff）
+                    </text>
+                </g>
+
+                <!-- Phase 3: Overflow detected -->
+                <g transform="translate(100, 220)">
+                    <rect width="700" height="80" rx="10" fill="#fef3c7" stroke="#fbbf24" stroke-width="2"/>
+                    <text x="15" y="25" font-weight="700" font-size="13" fill="#92400e">⚠️ 溢出检测触发！</text>
+                    <text x="15" y="48" font-size="11" fill="#64748b">
+                        isOverflow() 返回 true → 创建 Compaction 请求
+                    </text>
+                    <text x="15" y="63" font-size="11" fill="#64748b">
+                        Compaction Agent 被调用 → 生成结构化摘要（Goal/Instructions/Discoveries/...）
+                    </text>
+                    <text x="15" y="78" font-size="11" fill="#64748b">
+                        摘要写入 DB + 自动续传消息 → loop 继续
+                    </text>
+                </g>
+
+                <!-- Phase 4: After compaction -->
+                <g transform="translate(100, 315)">
+                    <rect width="700" height="70" rx="10" fill="#dbeafe" stroke="#93c5fd"/>
+                    <text x="15" y="25" font-weight="700" font-size="13" fill="#1e40af">压缩后的 Loop</text>
+                    <text x="15" y="48" font-size="11" fill="#64748b">
+                        filterCompacted() 再次加载消息 → 这次遇到 Compaction 就 STOP
+                    </text>
+                    <text x="15" y="63" font-size="11" fill="#64748b">
+                        LLM 收到的上下文：[摘要] + [摘要后的新消息] → 上下文大幅缩短！
+                    </text>
+                </g>
+
+                <!-- Phase 5: Session ends -->
+                <g transform="translate(100, 400)">
+                    <rect width="700" height="70" rx="10" fill="#fee2e2" stroke="#fca5a5"/>
+                    <text x="15" y="25" font-weight="700" font-size="13" fill="#991b1b">Loop 结束 → Prune 执行</text>
+                    <text x="15" y="48" font-size="11" fill="#64748b">
+                        从后向前遍历工具输出 → 保护最近 40K token → 超过的标记为 compacted
+                    </text>
+                    <text x="15" y="63" font-size="11" fill="#64748b">
+                        下次发送时：远古输出变为 "[Old tool result content cleared]"
+                    </text>
+                </g>
+
+                <!-- Phase 6: Next session -->
+                <g transform="translate(100, 485)">
+                    <rect width="700" height="85" rx="10" fill="#ede9fe" stroke="#a78bfa" stroke-width="2"/>
+                    <text x="15" y="25" font-weight="700" font-size="13" fill="#5b21b6">下一次 Session（跨会话）</text>
+                    <text x="15" y="48" font-size="11" fill="#64748b">
+                        ① Instruction.system() 重新扫描 AGENTS.md → 项目规范再次注入
+                    </text>
+                    <text x="15" y="63" font-size="11" fill="#64748b">
+                        ② 上一个 Session 的消息不共享（每个 Session 独立）
+                    </text>
+                    <text x="15" y="78" font-size="11" fill="#64748b">
+                        ③ 但 AGENTS.md 中可能包含上次的工作记录 → 间接跨会话记忆
+                    </text>
+                </g>
+            </svg>
+        </div>
+
+        <div class="box box-green">
+            <strong>协作的精妙：每个机制负责一个时间尺度</strong><br>
+            &bull; <strong>短期</strong>（当前轮）：原始消息 + 工具输出 → 全精度保留<br>
+            &bull; <strong>中短期</strong>（Session 内历史轮）：Prune 裁剪远古工具输出 → 保留摘要<br>
+            &bull; <strong>中期</strong>（Session 内跨轮）：Compaction 压缩旧对话 → filterCompacted 加载摘要<br>
+            &bull; <strong>长期</strong>（跨 Session）：AGENTS.md 持久注入 → 项目规范永不丢失
+        </div>
+    </div>
+
+    <!-- Section 10: 数据模型 -->
+    <div class="section" id="s10">
+        <h2>十、数据模型：Message 与 Part</h2>
+
+        <p>理解记忆系统的关键是理解 OpenCode 的消息数据模型。每条消息由 <code>Info</code>（元数据）和 <code>Parts</code>（内容片段）组成：</p>
+
+        <div class="diagram-container" style="padding: 20px;">
+            <svg width="780" height="350" viewBox="0 0 780 350">
+                <!-- Message -->
+                <g transform="translate(10, 10)">
+                    <rect width="760" height="330" rx="16" fill="#f8fafc" stroke="#e2e8f0" stroke-width="2"/>
+                    <text x="20" y="30" font-weight="700" font-size="16" fill="#1e293b">MessageV2.WithParts</text>
+
+                    <!-- Info -->
+                    <g transform="translate(20, 45)">
+                        <rect width="340" height="120" rx="10" fill="#dbeafe" stroke="#93c5fd"/>
+                        <text x="15" y="22" font-weight="600" font-size="13" fill="#1e40af">info (MessageV2.Info)</text>
+                        <text x="15" y="45" font-size="11" fill="#1e293b">id, sessionID, role (user|assistant)</text>
+                        <text x="15" y="63" font-size="11" fill="#1e293b">model, agent, time, cost, tokens</text>
+                        <text x="15" y="81" font-size="11" fill="#1e293b">parentID, finish, summary, error</text>
+                        <text x="15" y="100" font-size="10" fill="#64748b" font-style="italic">Assistant: summary=true → Compaction 生成的摘要</text>
+                        <text x="15" y="115" font-size="10" fill="#64748b" font-style="italic">User: summary.diffs → 关联的代码变更</text>
+                    </g>
+
+                    <!-- Parts -->
+                    <g transform="translate(380, 45)">
+                        <rect width="360" height="270" rx="10" fill="#d1fae5" stroke="#6ee7b7"/>
+                        <text x="15" y="22" font-weight="600" font-size="13" fill="#065f46">parts (Part[])</text>
+
+                        <!-- Part types -->
+                        <g transform="translate(15, 35)">
+                            <rect width="155" height="28" rx="6" fill="#10b981"/>
+                            <text x="78" y="19" text-anchor="middle" font-size="10" fill="white">TextPart — 文本内容</text>
+                        </g>
+                        <g transform="translate(180, 35)">
+                            <rect width="155" height="28" rx="6" fill="#10b981"/>
+                            <text x="78" y="19" text-anchor="middle" font-size="10" fill="white">ToolPart — 工具调用</text>
+                        </g>
+                        <g transform="translate(15, 70)">
+                            <rect width="155" height="28" rx="6" fill="#7c3aed"/>
+                            <text x="78" y="19" text-anchor="middle" font-size="10" fill="white">CompactionPart — 压缩请求</text>
+                        </g>
+                        <g transform="translate(180, 70)">
+                            <rect width="155" height="28" rx="6" fill="#2563eb"/>
+                            <text x="78" y="19" text-anchor="middle" font-size="10" fill="white">FilePart — 附件</text>
+                        </g>
+                        <g transform="translate(15, 105)">
+                            <rect width="155" height="28" rx="6" fill="#f59e0b"/>
+                            <text x="78" y="19" text-anchor="middle" font-size="10" fill="white">ReasoningPart — 推理</text>
+                        </g>
+                        <g transform="translate(180, 105)">
+                            <rect width="155" height="28" rx="6" fill="#06b6d4"/>
+                            <text x="78" y="19" text-anchor="middle" font-size="10" fill="white">SubtaskPart — 子任务</text>
+                        </g>
+                        <g transform="translate(15, 140)">
+                            <rect width="155" height="28" rx="6" fill="#64748b"/>
+                            <text x="78" y="19" text-anchor="middle" font-size="10" fill="white">StepStart/Finish — 步骤</text>
+                        </g>
+                        <g transform="translate(180, 140)">
+                            <rect width="155" height="28" rx="6" fill="#ef4444"/>
+                            <text x="78" y="19" text-anchor="middle" font-size="10" fill="white">Snapshot/Patch — 快照</text>
+                        </g>
+
+                        <!-- Tool state detail -->
+                        <text x="15" y="190" font-weight="600" font-size="11" fill="#065f46">ToolPart.state 关键字段：</text>
+                        <text x="15" y="208" font-size="10" fill="#1e293b">input — 工具输入参数</text>
+                        <text x="15" y="223" font-size="10" fill="#1e293b">output — 工具输出结果</text>
+                        <text x="15" y="238" font-size="10" fill="#ef4444" font-weight="600">time.compacted — 裁剪时间戳（Prune 标记）</text>
+                        <text x="15" y="253" font-size="10" fill="#1e293b">attachments — 附加文件</text>
+                    </g>
+                </g>
+            </svg>
+        </div>
+
+        <table>
+            <tr><th>Part 类型</th><th>角色</th><th>记忆系统中的作用</th></tr>
+            <tr>
+                <td><strong>CompactionPart</strong></td>
+                <td>User</td>
+                <td>标记 Compaction 请求，filterCompacted 的停止条件</td>
+            </tr>
+            <tr>
+                <td><strong>ToolPart</strong></td>
+                <td>Assistant</td>
+                <td><code>time.compacted</code> 字段控制 Prune 裁剪</td>
+            </tr>
+            <tr>
+                <td><strong>StepStart/Finish</strong></td>
+                <td>Assistant</td>
+                <td>携带 snapshot hash，Summary 用它们计算 diff</td>
+            </tr>
+            <tr>
+                <td><strong>TextPart</strong></td>
+                <td>User/Assistant</td>
+                <td>Compaction 摘要的文本内容</td>
+            </tr>
+        </table>
+    </div>
+
+    <!-- Section 11: 设计优势 -->
+    <div class="section" id="s11">
+        <h2>十一、设计优势深度分析</h2>
+
+        <div class="adv-grid">
+            <div class="adv-card">
+                <div class="icon">🎯</div>
+                <h4>零额外基础设施</h4>
+                <p>不需要向量数据库、Redis、独立的记忆服务。所有记忆都存在 SQLite + 文件系统中，部署简单、运维成本为零。</p>
+            </div>
+            <div class="adv-card">
+                <div class="icon">🔄</div>
+                <h4>天然兼容 LLM 理解方式</h4>
+                <p>摘要是自然语言，模型天然能理解"之前的总结 + 最近的消息"。不需要 embedding 检索、相似度计算等额外步骤。</p>
+            </div>
+            <div class="adv-card">
+                <div class="icon">⚡</div>
+                <h4>4/5 机制零 LLM 成本</h4>
+                <p>filterCompacted、Instruction、Summary、Prune 都不调用 LLM。只有 Compaction 需要额外 LLM 调用，且仅在上下文快溢出时触发。</p>
+            </div>
+            <div class="adv-card">
+                <div class="icon">🔗</div>
+                <h4>因果时序完整保留</h4>
+                <p>对话历史天然保留因果关系："因为用户说了 A，所以 Agent 做了 B"。向量检索可能丢失这种时序和因果。</p>
+            </div>
+            <div class="adv-card">
+                <div class="icon">📊</div>
+                <h4>分层降级策略</h4>
+                <p>Prune（廉价）→ Compaction（中等）→ Overflow Recovery（昂贵）。先用便宜方案尝试，不行再用贵的。成本可控。</p>
+            </div>
+            <div class="adv-card">
+                <div class="icon">🔌</div>
+                <h4>插件可扩展</h4>
+                <p>Compaction Prompt 可被插件覆盖（<code>Plugin.trigger</code>），Instruction 支持自定义 URL/文件，灵活适配不同场景。</p>
+            </div>
+            <div class="adv-card">
+                <div class="icon">🛡️</div>
+                <h4>安全边界清晰</h4>
+                <p>Compaction 有 20K buffer 预留防溢出；Prune 保护最近 40K + skill 工具；filterCompacted 三重条件验证。层层设防。</p>
+            </div>
+            <div class="adv-card">
+                <div class="icon">🎭</div>
+                <h4>对用户完全透明</h4>
+                <p>用户感知不到 Compaction/Prune 的存在。对话看起来是连续的，Agent 似乎一直"记住"之前的事。无感的记忆管理。</p>
+            </div>
+        </div>
+
+        <h3>分层降级的成本对比</h3>
+        <table>
+            <tr>
+                <th>机制</th>
+                <th>LLM 调用</th>
+                <th>触发频率</th>
+                <th>释放空间</th>
+                <th>信息损失</th>
+                <th>成本</th>
+            </tr>
+            <tr>
+                <td><strong>Prune</strong></td>
+                <td>无</td>
+                <td>每次 loop 结束</td>
+                <td>远古工具输出</td>
+                <td>完全丢失</td>
+                <td style="color: #10b981; font-weight: 600;">$0</td>
+            </tr>
+            <tr>
+                <td><strong>Compaction</strong></td>
+                <td>1 次</td>
+                <td>上下文接近上限时</td>
+                <td>旧对话 → 摘要</td>
+                <td>压缩为结构化总结</td>
+                <td style="color: #f59e0b; font-weight: 600;">~$0.01-0.05</td>
+            </tr>
+            <tr>
+                <td><strong>filterCompacted</strong></td>
+                <td>无</td>
+                <td>每轮 loop 开始</td>
+                <td>不释放（只是加载优化）</td>
+                <td>旧消息不发送</td>
+                <td style="color: #10b981; font-weight: 600;">$0</td>
+            </tr>
+            <tr>
+                <td><strong>Instruction</strong></td>
+                <td>无</td>
+                <td>每轮 loop</td>
+                <td>不释放（增加信息）</td>
+                <td>无</td>
+                <td style="color: #10b981; font-weight: 600;">$0</td>
+            </tr>
+        </table>
+    </div>
+
+    <!-- Section 12: 对比 -->
+    <div class="section" id="s12">
+        <h2>十二、与主流方案的对比</h2>
+
+        <table>
+            <tr>
+                <th>维度</th>
+                <th>向量数据库方案<br>(如 LangChain Memory)</th>
+                <th>滑动窗口方案<br>(如简单截断)</th>
+                <th>OpenCode 方案</th>
+            </tr>
+            <tr>
+                <td><strong>基础设施</strong></td>
+                <td>Pinecone / Milvus / Weaviate</td>
+                <td>无</td>
+                <td>SQLite + 文件系统</td>
+            </tr>
+            <tr>
+                <td><strong>检索方式</strong></td>
+                <td>语义相似度 Top-K</td>
+                <td>最近 N 条消息</td>
+                <td>LLM 摘要 + 原始消息</td>
+            </tr>
+            <tr>
+                <td><strong>时序保留</strong></td>
+                <td>❌ 丢失因果关系</td>
+                <td>✅ 保留最近</td>
+                <td>✅ 摘要保留关键因果</td>
+            </tr>
+            <tr>
+                <td><strong>跨会话记忆</strong></td>
+                <td>✅ 持久化</td>
+                <td>❌ 随会话消失</td>
+                <td>✅ AGENTS.md 文件级持久</td>
+            </tr>
+            <tr>
+                <td><strong>成本</strong></td>
+                <td>Embedding API + DB 运维</td>
+                <td>$0</td>
+                <td>仅 Compaction 时 $0.01-0.05</td>
+            </tr>
+            <tr>
+                <td><strong>信息损失</strong></td>
+                <td>检索不到就丢失</td>
+                <td>截断后全部丢失</td>
+                <td>LLM 智能提炼关键信息</td>
+            </tr>
+            <tr>
+                <td><strong>复杂度</strong></td>
+                <td>高（需要 embedding pipeline）</td>
+                <td>低</td>
+                <td>中等（5 个协作机制）</td>
+            </tr>
+            <tr>
+                <td><strong>适用场景</strong></td>
+                <td>知识库问答</td>
+                <td>简单聊天</td>
+                <td><strong>代码开发 Agent</strong></td>
+            </tr>
+        </table>
+
+        <div class="box box-purple" style="font-size: 1.02em;">
+            <strong>为什么 OpenCode 的方案最适合代码 Agent？</strong><br><br>
+            代码开发的核心记忆需求是：<strong>"我改了什么、为什么改、接下来改什么"</strong>——<br>
+            这是高度时序化、因果化的信息。向量检索擅长"找到相关的"，但不擅长"理解过程的"。<br><br>
+            OpenCode 的摘要模板完美契合：<code>Goal → Instructions → Discoveries → Accomplished → Files</code>。<br>
+            它不是在"搜索记忆"，而是在<strong>写交接文档</strong>——让下一个 Agent（或压缩后的自己）能无缝接手。
+        </div>
+    </div>
+
+    <!-- Footer -->
+    <div class="footer">
+        <p>OpenCode 记忆系统实现原理 · 基于 OpenCode 源码分析 · 核心文件：compaction.ts / message-v2.ts / instruction.ts / summary.ts / prompt.ts</p>
+    </div>
+
+</div>
+</body>
+</html>

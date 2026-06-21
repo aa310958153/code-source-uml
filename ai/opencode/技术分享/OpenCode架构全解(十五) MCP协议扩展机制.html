@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OpenCode MCP协议扩展机制 - 深度技术分享</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}html{scroll-behavior:smooth}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#f8fafc;color:#1e293b;line-height:1.7}
+.hero{background:linear-gradient(135deg,#7c2d12 0%,#c2410c 50%,#ea580c 100%);color:white;padding:80px 0 60px;text-align:center}
+.hero h1{font-size:2.4em;margin-bottom:12px;font-weight:800}.hero p{font-size:1.15em;opacity:.85;max-width:700px;margin:0 auto}
+.hero .tag{display:inline-block;background:rgba(255,255,255,.15);padding:4px 14px;border-radius:20px;font-size:.85em;margin-top:16px}
+.container{max-width:960px;margin:0 auto;padding:0 24px}
+.toc{background:white;border-radius:12px;padding:28px 32px;margin:32px auto;box-shadow:0 1px 3px rgba(0,0,0,.08)}
+.toc h2{font-size:1.2em;margin-bottom:14px;color:#c2410c}.toc ol{padding-left:22px}.toc li{margin:6px 0}.toc a{color:#c2410c;text-decoration:none;font-size:.95em}.toc a:hover{text-decoration:underline}
+.section{margin:36px 0}.section h2{font-size:1.5em;font-weight:700;margin-bottom:16px;padding-bottom:8px;border-bottom:2px solid #e2e8f0}
+.section h3{font-size:1.15em;font-weight:600;margin:18px 0 10px;color:#334155}
+.card{background:white;border-radius:10px;padding:24px;margin:16px 0;box-shadow:0 1px 3px rgba(0,0,0,.06)}
+pre{background:#0f172a;color:#e2e8f0;border-radius:8px;padding:18px;overflow-x:auto;font-size:.88em;line-height:1.6;margin:12px 0}
+code{font-family:'JetBrains Mono','Fira Code',monospace}.inline-code{background:#e2e8f0;color:#1e293b;padding:2px 6px;border-radius:4px;font-size:.9em}
+table{width:100%;border-collapse:collapse;margin:14px 0;font-size:.92em}
+th{background:#c2410c;color:white;padding:10px 14px;text-align:left}td{padding:10px 14px;border-bottom:1px solid #e2e8f0}tr:nth-child(even){background:#f1f5f9}
+.tip{background:linear-gradient(135deg,#eff6ff,#dbeafe);border-left:4px solid #3b82f6;padding:16px 20px;border-radius:0 8px 8px 0;margin:14px 0}
+.warn{background:linear-gradient(135deg,#fefce8,#fef9c3);border-left:4px solid #eab308;padding:16px 20px;border-radius:0 8px 8px 0;margin:14px 0}
+.danger{background:linear-gradient(135deg,#fef2f2,#fee2e2);border-left:4px solid #ef4444;padding:16px 20px;border-radius:0 8px 8px 0;margin:14px 0}
+.flow{display:flex;align-items:center;justify-content:center;gap:8px;flex-wrap:wrap;margin:20px 0;font-size:.92em}
+.flow .node{background:white;border:2px solid #c2410c;border-radius:8px;padding:8px 16px;font-weight:600}.flow .arrow{color:#c2410c;font-size:1.3em;font-weight:bold}
+.step{display:flex;gap:14px;align-items:flex-start;margin:12px 0}
+.step .num{background:#c2410c;color:white;min-width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:.9em;flex-shrink:0}
+.step .content{flex:1}
+</style>
+</head>
+<body>
+
+<div class="hero">
+<div class="container">
+<h1>OpenCode MCP 协议扩展机制</h1>
+<p>Model Context Protocol — 让 AI 动态调用外部工具、资源与 Prompt 的标准化协议</p>
+<div class="tag">Harness 深度技术分享 · 第 15 篇</div>
+</div>
+</div>
+
+<div class="container">
+
+<div class="toc">
+<h2>目录</h2>
+<ol>
+<li><a href="#ch1">MCP 是什么？为什么需要它？</a></li>
+<li><a href="#ch2">三种 MCP 传输协议</a></li>
+<li><a href="#ch3">配置格式与初始化流程</a></li>
+<li><a href="#ch4">工具转换 — MCP Tool → AI SDK Tool</a></li>
+<li><a href="#ch5">OAuth 认证流</a></li>
+<li><a href="#ch6">动态工具变更通知</a></li>
+<li><a href="#ch7">资源与 Prompt 暴露</a></li>
+<li><a href="#ch8">状态管理与生命周期</a></li>
+<li><a href="#ch9">与内置工具的集成</a></li>
+<li><a href="#ch10">完整生命周期总结</a></li>
+</ol>
+</div>
+
+<div class="section" id="ch1">
+<h2>一、MCP 是什么？为什么需要它？</h2>
+
+<p><strong>Model Context Protocol (MCP)</strong> 是一个标准化协议，让 AI 模型能够动态连接外部工具和服务。与内置工具（编译时确定）不同，MCP 工具在<strong>运行时</strong>发现和注册。</p>
+
+<div class="card">
+<h3>内置工具 vs MCP 工具</h3>
+<table>
+<tr><th>维度</th><th>内置工具</th><th>MCP 工具</th></tr>
+<tr><td>注册时机</td><td>编译时 / Agent 初始化时</td><td>运行时动态发现</td></tr>
+<tr><td>来源</td><td>OpenCode 源码</td><td>外部 MCP Server（本地进程或远程服务）</td></tr>
+<tr><td>协议</td><td>TypeScript 函数</td><td>JSON-RPC over stdio/SSE/HTTP</td></tr>
+<tr><td>示例</td><td>ReadTool、EditTool、BashTool</td><td>GitHub API、Jira、数据库查询、自定义工具</td></tr>
+<tr><td>权限</td><td>Agent permission 控制</td><td>统一的 MCP permission 检查</td></tr>
+</table>
+</div>
+</div>
+
+<div class="section" id="ch2">
+<h2>二、三种 MCP 传输协议</h2>
+
+<div class="flow">
+<div class="node">stdio</div>
+<div class="arrow">|</div>
+<div class="node">SSE</div>
+<div class="arrow">|</div>
+<div class="node">StreamableHTTP</div>
+</div>
+
+<pre><code>// packages/opencode/src/mcp/index.ts
+if (mcp.type === "remote") {
+    // 远程 MCP 服务器 — 尝试两种传输方式
+    const transports = [
+        { name: "SSE",         transport: new SSEClientTransport(new URL(mcp.url), { authProvider }) },
+        { name: "StreamableHTTP", transport: new StreamableHTTPClientTransport(new URL(mcp.url), { authProvider }) },
+    ]
+    for (const { name, transport } of transports) {
+        try {
+            const client = new Client({ name: "opencode", version: Installation.VERSION })
+            await withTimeout(client.connect(transport), connectTimeout)
+            mcpClient = client
+            break   // 连接成功，使用此传输方式
+        } catch (error) { /* 尝试下一种 */ }
+    }
+} else {
+    // 本地 MCP 服务器 — stdio 传输
+    const transport = new StdioClientTransport({
+        command: mcp.command[0],
+        args: mcp.command.slice(1),
+        env: { ...process.env, ...mcp.env },
+    })
+    await client.connect(transport)
+}</code></pre>
+
+<table>
+<tr><th>协议</th><th>适用场景</th><th>传输方式</th></tr>
+<tr><td><strong>stdio</strong></td><td>本地进程（node/python 脚本）</td><td>stdin/stdout JSON-RPC</td></tr>
+<tr><td><strong>SSE</strong></td><td>远程 HTTP 服务器</td><td>Server-Sent Events + POST</td></tr>
+<tr><td><strong>StreamableHTTP</strong></td><td>新一代远程服务器</td><td>双向 HTTP 流</td></tr>
+</table>
+
+<div class="tip">
+<strong>连接回退策略：</strong>远程 MCP 先尝试 SSE，失败后尝试 StreamableHTTP。这确保了向后兼容旧版 MCP 服务器，同时支持新版协议。
+</div>
+</div>
+
+<div class="section" id="ch3">
+<h2>三、配置格式与初始化流程</h2>
+
+<pre><code>// opencode.json 中的 MCP 配置
+{
+  "mcp": {
+    "github": {
+      "type": "remote",
+      "url": "https://mcp.github.com/sse",
+      "oauth": true,
+      "headers": { "X-Custom": "value" },
+      "timeout": 60000
+    },
+    "filesystem": {
+      "type": "local",
+      "command": ["npx", "-y", "@modelcontextprotocol/server-filesystem", "/path/to/dir"],
+      "enabled": true
+    },
+    "disabled-server": {
+      "type": "local",
+      "command": ["node", "server.js"],
+      "enabled": false      // 显式禁用
+    }
+  }
+}</code></pre>
+</div>
+
+<div class="section" id="ch4">
+<h2>四、工具转换 — MCP Tool → AI SDK Tool</h2>
+
+<pre><code>// mcp/index.ts — convertMcpTool
+async function convertMcpTool(mcpTool: MCPToolDef, client: MCPClient, timeout?: number): Promise&lt;Tool> {
+    const inputSchema = mcpTool.inputSchema
+    const schema: JSONSchema7 = {
+        ...(inputSchema as JSONSchema7),
+        type: "object",                    // 强制为 object 类型
+        properties: (inputSchema.properties ?? {}) as JSONSchema7["properties"],
+        additionalProperties: false,
+    }
+
+    return dynamicTool({
+        description: mcpTool.description ?? "",
+        inputSchema: jsonSchema(schema),
+        execute: async (args) => {
+            return client.callTool(
+                { name: mcpTool.name, arguments: (args || {}) as Record&lt;string, unknown> },
+                CallToolResultSchema,
+                { resetTimeoutOnProgress: true, timeout },
+            )
+        },
+    })
+}</code></pre>
+
+<div class="card">
+<h3>转换链路</h3>
+<div class="step"><div class="num">1</div><div class="content">MCP Server 返回工具列表（name + description + JSON Schema）</div></div>
+<div class="step"><div class="num">2</div><div class="content"><span class="inline-code">convertMcpTool</span> 将其包装为 AI SDK 的 dynamicTool</div></div>
+<div class="step"><div class="num">3</div><div class="content">在 <span class="inline-code">resolveTools()</span> 中，MCP 工具与内置工具合并到同一个 tools 字典</div></div>
+<div class="step"><div class="num">4</div><div class="content">AI 模型看到的 MCP 工具和内置工具格式完全一致</div></div>
+</div>
+</div>
+
+<div class="section" id="ch5">
+<h2>五、OAuth 认证流</h2>
+
+<p>远程 MCP 服务器默认启用 OAuth 认证：</p>
+
+<pre><code>// OAuth 配置
+const oauthDisabled = mcp.oauth === false
+const oauthConfig = typeof mcp.oauth === "object" ? mcp.oauth : undefined
+
+const authProvider = new McpOAuthProvider(
+    key, mcp.url,
+    { clientId: oauthConfig?.clientId, clientSecret: oauthConfig?.clientSecret, scope: oauthConfig?.scope },
+    { onRedirect: async (url) => { /* 存储回调 URL */ } },
+)
+
+// 连接时如果返回 401，触发 OAuth 流
+if (error instanceof UnauthorizedError) {
+    status = { status: "needs_auth" }
+    pendingOAuthTransports.set(key, transport)
+}</code></pre>
+
+<div class="tip">
+<strong>OAuth 状态机：</strong>connected → needs_auth（需要浏览器授权）→ needs_client_registration（需要注册 client_id）→ connected（授权完成）。
+</div>
+</div>
+
+<div class="section" id="ch6">
+<h2>六、动态工具变更通知</h2>
+
+<pre><code>// 注册 MCP 工具变更通知处理器
+function registerNotificationHandlers(client: MCPClient, serverName: string) {
+    client.setNotificationHandler(ToolListChangedNotificationSchema, async () => {
+        Bus.publish(ToolsChanged, { server: serverName })
+    })
+}
+
+// 前端收到 mcp.tools.changed 事件后，重新获取工具列表
+// AI 在下一次 ReAct 循环中会自动使用新的工具集</code></pre>
+
+<p>这使得 MCP 服务器可以在运行时动态添加、删除或修改工具，AI 会自动适应。</p>
+</div>
+
+<div class="section" id="ch7">
+<h2>七、资源与 Prompt 暴露</h2>
+
+<p>MCP 不仅暴露工具，还暴露<strong>资源</strong>和 <strong>Prompt</strong>：</p>
+
+<table>
+<tr><th>MCP 能力</th><th>OpenCode 中的映射</th><th>用途</th></tr>
+<tr><td>Tools</td><td>AI 可调用的工具</td><td>数据库查询、API 调用、文件操作</td></tr>
+<tr><td>Resources</td><td>作为文件附件引用</td><td>配置信息、知识库文档</td></tr>
+<tr><td>Prompts</td><td>注册为 Command</td><td>预定义的 Prompt 模板</td></tr>
+</table>
+
+<pre><code>// 获取 MCP 资源
+async function fetchResourcesForClient(clientName, client) {
+    const resources = await client.listResources()
+    for (const resource of resources.resources) {
+        const key = sanitizedClient + ":" + sanitizedResource
+        commands[key] = { ...resource, client: clientName }
+    }
+}</code></pre>
+</div>
+
+<div class="section" id="ch8">
+<h2>八、状态管理与生命周期</h2>
+
+<pre><code>// MCP Status 类型
+export const Status = z.discriminatedUnion("status", [
+    z.object({ status: z.literal("connected") }),
+    z.object({ status: z.literal("disabled") }),
+    z.object({ status: z.literal("failed"), error: z.string() }),
+    z.object({ status: z.literal("needs_auth") }),
+    z.object({ status: z.literal("needs_client_registration"), error: z.string() }),
+])</code></pre>
+
+<div class="card">
+<h3>清理逻辑</h3>
+<p>Instance dispose 时，MCP 会：1) 杀死所有子进程树（防止孤儿进程）；2) 关闭所有 MCP Client 连接；3) 清理 pending OAuth transports。</p>
+</div>
+</div>
+
+<div class="section" id="ch9">
+<h2>九、与内置工具的集成</h2>
+
+<p>在 <span class="inline-code">resolveTools()</span> 中，MCP 工具和内置工具被统一注入到 AI 的工具集中：</p>
+
+<pre><code>// session/prompt.ts — resolveTools
+// 1. 内置工具
+for (const item of await ToolRegistry.tools(model, agent)) {
+    tools[item.id] = wrapWithHooks(item)
+}
+// 2. MCP 工具
+for (const [key, item] of Object.entries(await MCP.tools())) {
+    item.execute = wrapWithHooksAndPermission(item)
+    tools[key] = item
+}
+// AI 看到的是一个统一的工具列表，无法区分内置/MCP</code></pre>
+
+<div class="warn">
+<strong>权限差异：</strong>内置工具的权限由 Agent.permission 精细控制，MCP 工具统一走 <span class="inline-code">permission: key</span> 检查（每个 MCP 工具有独立的权限名）。
+</div>
+</div>
+
+<div class="section" id="ch10">
+<h2>十、完整生命周期总结</h2>
+<div class="card">
+<table>
+<tr><th>规律</th><th>体现</th></tr>
+<tr><td><strong>运行时发现</strong></td><td>MCP 工具在启动时动态发现，而非编译时确定</td></tr>
+<tr><td><strong>三协议兼容</strong></td><td>stdio（本地）+ SSE + StreamableHTTP（远程），自动回退</td></tr>
+<tr><td><strong>统一工具接口</strong></td><td>MCP 工具通过 dynamicTool 转换为 AI SDK 标准格式</td></tr>
+<tr><td><strong>OAuth 集成</strong></td><td>远程 MCP 自动启用 OAuth，支持浏览器授权流</td></tr>
+<tr><td><strong>动态变更</strong></td><td>ToolListChanged 通知 → Bus 事件 → AI 自动适应新工具集</td></tr>
+<tr><td><strong>资源/Prompt</strong></td><td>不仅暴露工具，还暴露资源和 Prompt 模板</td></tr>
+<tr><td><strong>进程管理</strong></td><td>退出时杀死完整进程树，防止孤儿进程</td></tr>
+</table>
+</div>
+
+<div class="tip"><strong>下一篇预告：</strong>快照与 Diff 追踪 — 私有 Git 仓库实现每步代码变更追踪与回退。</div>
+</div>
+
+</div>
+</body>
+</html>

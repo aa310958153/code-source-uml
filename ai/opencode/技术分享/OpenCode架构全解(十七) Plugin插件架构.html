@@ -1,0 +1,479 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OpenCode Plugin 插件架构 - 深度技术分享</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}html{scroll-behavior:smooth}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#f8fafc;color:#1e293b;line-height:1.7}
+.hero{background:linear-gradient(135deg,#7c3aed 0%,#a855f7 50%,#c084fc 100%);color:white;padding:80px 0 60px;text-align:center}
+.hero h1{font-size:2.4em;margin-bottom:12px;font-weight:800}.hero p{font-size:1.15em;opacity:.85;max-width:700px;margin:0 auto}
+.hero .tag{display:inline-block;background:rgba(255,255,255,.15);padding:4px 14px;border-radius:20px;font-size:.85em;margin-top:16px}
+.container{max-width:960px;margin:0 auto;padding:0 24px}
+.toc{background:white;border-radius:12px;padding:28px 32px;margin:32px auto;box-shadow:0 1px 3px rgba(0,0,0,.08)}
+.toc h2{font-size:1.2em;margin-bottom:14px;color:#7c3aed}.toc ol{padding-left:22px}.toc li{margin:6px 0}.toc a{color:#7c3aed;text-decoration:none;font-size:.95em}.toc a:hover{text-decoration:underline}
+.section{margin:36px 0}.section h2{font-size:1.5em;font-weight:700;margin-bottom:16px;padding-bottom:8px;border-bottom:2px solid #e2e8f0}
+.section h3{font-size:1.15em;font-weight:600;margin:18px 0 10px;color:#334155}
+.card{background:white;border-radius:10px;padding:24px;margin:16px 0;box-shadow:0 1px 3px rgba(0,0,0,.06)}
+pre{background:#0f172a;color:#e2e8f0;border-radius:8px;padding:18px;overflow-x:auto;font-size:.88em;line-height:1.6;margin:12px 0}
+code{font-family:'JetBrains Mono','Fira Code',monospace}.inline-code{background:#e2e8f0;color:#1e293b;padding:2px 6px;border-radius:4px;font-size:.9em}
+table{width:100%;border-collapse:collapse;margin:14px 0;font-size:.92em}
+th{background:#7c3aed;color:white;padding:10px 14px;text-align:left}td{padding:10px 14px;border-bottom:1px solid #e2e8f0}tr:nth-child(even){background:#f1f5f9}
+.tip{background:linear-gradient(135deg,#f5f3ff,#ede9fe);border-left:4px solid #8b5cf6;padding:16px 20px;border-radius:0 8px 8px 0;margin:14px 0}
+.warn{background:linear-gradient(135deg,#fefce8,#fef9c3);border-left:4px solid #eab308;padding:16px 20px;border-radius:0 8px 8px 0;margin:14px 0}
+.flow{display:flex;align-items:center;justify-content:center;gap:8px;flex-wrap:wrap;margin:20px 0;font-size:.92em}
+.flow .node{background:white;border:2px solid #7c3aed;border-radius:8px;padding:8px 16px;font-weight:600}.flow .arrow{color:#7c3aed;font-size:1.3em;font-weight:bold}
+.step{display:flex;gap:14px;align-items:flex-start;margin:12px 0}
+.step .num{background:#7c3aed;color:white;min-width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:.9em;flex-shrink:0}
+.step .content{flex:1}
+.box{background:white;border:1px solid #e2e8f0;border-radius:8px;padding:16px;margin:10px 0}
+</style>
+</head>
+<body>
+<div class="hero"><div class="container"><h1>OpenCode Plugin 插件架构</h1><p>内置插件 + NPM 包 + 本地文件三种加载方式，Hook 链式拦截实现无侵入扩展</p><div class="tag">Harness 深度技术分享 · 第 17 篇</div></div></div>
+
+<div class="container">
+<div class="toc"><h2>目录</h2><ol>
+<li><a href="#ch1">Plugin 系统全景</a></li>
+<li><a href="#ch2">三层插件来源</a></li>
+<li><a href="#ch3">初始化流程详解</a></li>
+<li><a href="#ch4">Hook 触发机制</a></li>
+<li><a href="#ch5">PluginInput 注入上下文</a></li>
+<li><a href="#ch6">内置插件解析</a></li>
+<li><a href="#ch7">NPM 包插件安装与加载</a></li>
+<li><a href="#ch8">本地文件插件</a></li>
+<li><a href="#ch9">事件分发机制</a></li>
+<li><a href="#ch10">去重与优先级策略</a></li>
+<li><a href="#ch11">错误处理与容错</a></li>
+</ol></div>
+
+<div class="section" id="ch1"><h2>一、Plugin 系统全景</h2>
+<p>OpenCode 的 Plugin 系统是一个<strong>三层插件架构</strong>，支持从认证到代码分析的各种功能扩展。所有插件最终汇聚到同一个 hooks 数组中，通过统一的 <span class="inline-code">trigger()</span> 函数链式调用。</p>
+
+<div class="flow">
+<div class="node">Internal Plugins</div><div class="arrow">→</div>
+<div class="node">Builtin (NPM)</div><div class="arrow">→</div>
+<div class="node">User Plugins</div><div class="arrow">→</div>
+<div class="node">hooks[]</div>
+</div>
+
+<div class="card">
+<table>
+<tr><th>层级</th><th>来源</th><th>加载方式</th><th>典型用途</th></tr>
+<tr><td>Internal Plugins</td><td>硬编码在源码中</td><td>直接 import</td><td>CodexAuth、CopilotAuth、GitlabAuth</td></tr>
+<tr><td>Builtin NPM</td><td>opencode-anthropic-auth</td><td>BunProc.install + import</td><td>Anthropic OAuth 认证</td></tr>
+<tr><td>User Plugins</td><td>opencode.json plugin 字段</td><td>file:// 或 NPM install</td><td>自定义 Hook、第三方集成</td></tr>
+</table>
+</div>
+</div>
+
+<div class="section" id="ch2"><h2>二、三层插件来源</h2>
+
+<h3>1. Internal Plugins — 内置硬编码</h3>
+<pre><code>// plugin/index.ts
+const INTERNAL_PLUGINS: PluginInstance[] = [
+    CodexAuthPlugin,
+    CopilotAuthPlugin,
+    GitlabAuthPlugin,
+]</code></pre>
+<p>这三个插件随 OpenCode 源码一起编译，<strong>不需要安装</strong>，直接 import。它们处理的是各种 AI Provider 的 OAuth 认证流程：</p>
+<div class="card">
+<table>
+<tr><th>插件</th><th>功能</th></tr>
+<tr><td>CodexAuthPlugin</td><td>OpenAI Codex 认证</td></tr>
+<tr><td>CopilotAuthPlugin</td><td>GitHub Copilot 认证（含 GPT-5 判断）</td></tr>
+<tr><td>GitlabAuthPlugin</td><td>GitLab AI Gateway 认证</td></tr>
+</table>
+</div>
+
+<h3>2. Builtin NPM — 默认安装</h3>
+<pre><code>const BUILTIN = ["opencode-anthropic-auth@0.0.13"]
+
+// 除非 OPENCODE_DISABLE_DEFAULT_PLUGINS 环境变量被设置
+if (!Flag.OPENCODE_DISABLE_DEFAULT_PLUGINS) {
+    plugins = [...BUILTIN, ...plugins]
+}</code></pre>
+<p>Anthropic 的 OAuth 认证作为独立 NPM 包发布，默认安装。用户可以通过环境变量 <span class="inline-code">OPENCODE_DISABLE_DEFAULT_PLUGINS</span> 禁用。</p>
+
+<h3>3. User Plugins — 用户配置</h3>
+<pre><code>// opencode.json
+{
+    "plugin": [
+        "my-opencode-plugin@1.0.0",
+        "file:///path/to/local-plugin.js"
+    ]
+}</code></pre>
+<p>用户在配置文件的 <span class="inline-code">plugin</span> 字段指定。支持两种格式：</p>
+<div class="box">
+<strong>NPM 包：</strong><span class="inline-code">package-name@version</span> — 自动安装到临时目录<br>
+<strong>本地文件：</strong><span class="inline-code">file:///absolute/path.js</span> — 直接 import
+</div>
+</div>
+
+<div class="section" id="ch3"><h2>三、初始化流程详解</h2>
+<p>Plugin 初始化在 <span class="inline-code">state()</span> 中完成，通过 <span class="inline-code">Instance.state()</span> 绑定到项目实例的生命周期：</p>
+
+<pre><code>const state = Instance.state(async () => {
+    // 1. 创建 SDK client（插件通过它与 OpenCode API 交互）
+    const client = createOpencodeClient({
+        baseUrl: "http://localhost:4096",
+        directory: Instance.directory,
+        fetch: async (...args) => Server.App().fetch(...args),
+    })
+
+    // 2. 构建 PluginInput（注入给每个插件的上下文）
+    const input: PluginInput = {
+        client,          // OpenCode SDK 客户端
+        project: Instance.project,
+        worktree: Instance.worktree,
+        directory: Instance.directory,
+        serverUrl: Server.url(),
+        $: Bun.$,        // Bun shell
+    }
+
+    // 3. 加载 Internal Plugins
+    for (const plugin of INTERNAL_PLUGINS) {
+        const init = await plugin(input)
+        if (init) hooks.push(init)
+    }
+
+    // 4. 加载 Builtin + User Plugins（NPM 包或本地文件）
+    for (let plugin of plugins) {
+        if (!plugin.startsWith("file://")) {
+            plugin = await BunProc.install(pkg, version)
+        }
+        await import(plugin).then(async (mod) => {
+            const seen = new Set()
+            for (const [name, fn] of Object.entries(mod)) {
+                if (seen.has(fn)) continue  // 去重
+                seen.add(fn)
+                hooks.push(await fn(input))
+            }
+        })
+    }
+
+    return { hooks, input }
+})</code></pre>
+
+<div class="tip">
+<strong>SDK Client 的特殊设计：</strong>插件获得的 client 并非真正发 HTTP 请求，而是通过 <span class="inline-code">Server.App().fetch(...args)</span> 直接在进程内调用 Hono 路由。这意味着插件的 API 调用零网络开销。
+</div>
+</div>
+
+<div class="section" id="ch4"><h2>四、Hook 触发机制</h2>
+<p>所有插件注册的 hooks 汇聚在一个数组中，通过 <span class="inline-code">trigger()</span> 函数<strong>链式调用</strong>：</p>
+
+<pre><code>export async function trigger&lt;
+    Name extends Exclude&lt;keyof Required&lt;Hooks>, "auth" | "event" | "tool">,
+    Input = Parameters&lt;Required&lt;Hooks>[Name]>[0],
+    Output = Parameters&lt;Required&lt;Hooks>[Name]>[1],
+>(name: Name, input: Input, output: Output): Promise&lt;Output> {
+    if (!name) return output
+    for (const hook of await state().then((x) => x.hooks)) {
+        const fn = hook[name]
+        if (!fn) continue
+        await fn(input, output)  // 每个 hook 可以修改 output
+    }
+    return output
+}</code></pre>
+
+<div class="card">
+<h3>调用链模式</h3>
+<pre><code>// 调用示例：在 LLM 请求前修改 prompt
+const result = await Plugin.trigger(
+    "session.prompt",           // hook 名称
+    { sessionID: "abc" },       // input（只读上下文）
+    { messages: [...], ... }    // output（可修改的数据）
+)
+// 每个插件的 session.prompt hook 都能修改 result</code></pre>
+
+<p>这是一个典型的<strong>管道模式</strong>：output 对象在多个插件之间传递，每个插件可以读取和修改它。类型系统保证了 input/output 的类型安全。</p>
+</div>
+
+<div class="warn">
+<strong>注意排除的 Hook 类型：</strong><span class="inline-code">auth</span>、<span class="inline-code">event</span>、<span class="inline-code">tool</span> 这三个 hook 不通过 trigger() 调用。auth 由 Provider 直接调用，event 由 Bus.subscribeAll 分发，tool 在工具注册时直接集成。
+</div>
+</div>
+
+<div class="section" id="ch5"><h2>五、PluginInput 注入上下文</h2>
+<p>每个插件在初始化时收到一个 <span class="inline-code">PluginInput</span> 对象，包含与 OpenCode 交互所需的全部上下文：</p>
+
+<div class="card">
+<table>
+<tr><th>字段</th><th>类型</th><th>说明</th></tr>
+<tr><td>client</td><td>OpencodeClient</td><td>SDK 客户端，可调用 Session/Message/Config 等 API</td></tr>
+<tr><td>project</td><td>Project</td><td>当前项目信息（ID、名称等）</td></tr>
+<tr><td>worktree</td><td>string</td><td>Git worktree 根目录</td></tr>
+<tr><td>directory</td><td>string</td><td>项目工作目录</td></tr>
+<tr><td>serverUrl</td><td>string</td><td>OpenCode Server 的 URL</td></tr>
+<tr><td>$</td><td>BunShell</td><td>Bun Shell，可执行系统命令</td></tr>
+</table>
+</div>
+
+<pre><code>// 插件示例：初始化函数接收 input，返回 hooks
+export default function myPlugin(input: PluginInput): Hooks {
+    return {
+        // 在 config 加载后修改配置
+        config(cfg) {
+            cfg.instructions?.push("Always use TypeScript")
+        },
+        // 监听所有 Bus 事件
+        event({ event }) {
+            if (event.type === "session.updated") {
+                console.log("Session updated:", event.properties.id)
+            }
+        },
+    }
+}</code></pre>
+</div>
+
+<div class="section" id="ch6"><h2>六、内置插件解析</h2>
+<p>三个 Internal Plugins 各自处理一个 AI Provider 的认证流程。它们在 Plugin 系统最早期加载：</p>
+
+<pre><code>// 加载顺序
+// 1. Internal Plugins — 直接导入，零安装
+for (const plugin of INTERNAL_PLUGINS) {
+    log.info("loading internal plugin", { name: plugin.name })
+    const init = await plugin(input).catch((err) => {
+        log.error("failed to load internal plugin", { name: plugin.name, error: err })
+    })
+    if (init) hooks.push(init)
+}</code></pre>
+
+<div class="tip">
+<strong>容错设计：</strong>即使某个内置插件加载失败，也不会阻断其他插件。错误被 catch 后只记录日志，不会 throw。这对于认证类插件尤为重要 — 用户可能只使用其中一个 Provider。
+</div>
+</div>
+
+<div class="section" id="ch7"><h2>七、NPM 包插件安装与加载</h2>
+<p>对于非 <span class="inline-code">file://</span> 前缀的插件，系统会通过 BunProc 自动安装：</p>
+
+<pre><code>for (let plugin of plugins) {
+    // 忽略已废弃的旧版插件
+    if (plugin.includes("opencode-openai-codex-auth")) continue
+    if (plugin.includes("opencode-copilot-auth")) continue
+
+    if (!plugin.startsWith("file://")) {
+        // 解析包名和版本
+        const lastAtIndex = plugin.lastIndexOf("@")
+        const pkg = lastAtIndex > 0 ? plugin.substring(0, lastAtIndex) : plugin
+        const version = lastAtIndex > 0 ? plugin.substring(lastAtIndex + 1) : "latest"
+
+        // 安装 NPM 包
+        plugin = await BunProc.install(pkg, version).catch((err) => {
+            Bus.publish(Session.Event.Error, {
+                error: new NamedError.Unknown({
+                    message: `Failed to install plugin ${pkg}@${version}`,
+                }).toObject(),
+            })
+            return ""
+        })
+        if (!plugin) continue
+    }
+
+    // 动态 import 并初始化
+    await import(plugin).then(async (mod) => {
+        const seen = new Set()
+        for (const [name, fn] of Object.entries(mod)) {
+            if (seen.has(fn)) continue
+            seen.add(fn)
+            hooks.push(await fn(input))
+        }
+    })
+}</code></pre>
+
+<div class="card">
+<h3>模块去重机制</h3>
+<p>当一个 NPM 模块同时有 named export 和 default export 指向同一个函数时：</p>
+<pre><code>// 例如插件模块：
+export const myPlugin = (input) => ({ config(cfg) { ... } })
+export default myPlugin  // 同一个引用
+
+// 没有去重会初始化两次！
+// seen Set 通过引用比较避免重复初始化
+const seen = new Set&lt;PluginInstance>()
+for (const [name, fn] of Object.entries(mod)) {
+    if (seen.has(fn)) continue  // 跳过重复引用
+    seen.add(fn)
+    hooks.push(await fn(input))
+}</code></pre>
+</div>
+</div>
+
+<div class="section" id="ch8"><h2>八、本地文件插件</h2>
+<p>以 <span class="inline-code">file://</span> 开头的插件直接从本地路径加载，无需安装：</p>
+
+<pre><code>// opencode.json
+{
+    "plugin": [
+        "file:///Users/dev/.opencode/plugins/my-auth.js"
+    ]
+}
+
+// 加载时跳过 BunProc.install，直接 import
+if (!plugin.startsWith("file://")) {
+    plugin = await BunProc.install(pkg, version)
+}
+await import(plugin)  // file:// URL 可被 Bun/Node 直接 import</code></pre>
+
+<p>此外，<span class="inline-code">.opencode/plugins/</span> 目录下的 .ts/.js 文件也会被自动发现并作为本地插件加载：</p>
+
+<pre><code>// config.ts — loadPlugin()
+async function loadPlugin(dir: string) {
+    const plugins: string[] = []
+    for (const item of await Glob.scan("{plugin,plugins}/*.{ts,js}", {
+        cwd: dir,
+        absolute: true,
+    })) {
+        plugins.push(pathToFileURL(item).href)  // 转为 file:// URL
+    }
+    return plugins
+}</code></pre>
+
+<div class="tip">
+<strong>本地插件开发很方便：</strong>放在 <span class="inline-code">.opencode/plugins/</span> 下，无需修改 opencode.json，系统自动扫描并转为 file:// URL 加载。
+</div>
+</div>
+
+<div class="section" id="ch9"><h2>九、事件分发机制</h2>
+<p><span class="inline-code">Plugin.init()</span> 除了调用 config hook 外，还会订阅 Bus 的所有事件并分发给插件：</p>
+
+<pre><code>export async function init() {
+    const hooks = await state().then((x) => x.hooks)
+    const config = await Config.get()
+
+    // 1. 调用每个插件的 config hook（可修改配置）
+    for (const hook of hooks) {
+        await hook.config?.(config)
+    }
+
+    // 2. 订阅所有 Bus 事件，转发给插件的 event hook
+    Bus.subscribeAll(async (input) => {
+        const hooks = await state().then((x) => x.hooks)
+        for (const hook of hooks) {
+            hook["event"]?.({ event: input })
+        }
+    })
+}</code></pre>
+
+<div class="flow">
+<div class="node">Bus.publish()</div><div class="arrow">→</div>
+<div class="node">subscribeAll</div><div class="arrow">→</div>
+<div class="node">hook.event()</div><div class="arrow">→</div>
+<div class="node">插件处理</div>
+</div>
+
+<div class="card">
+<h3>插件可监听的事件类型</h3>
+<p>通过 Bus.subscribeAll，插件能收到所有 BusEvent 定义的事件：</p>
+<table>
+<tr><th>事件类型</th><th>触发时机</th></tr>
+<tr><td>session.created</td><td>新会话创建</td></tr>
+<tr><td>session.updated</td><td>会话消息更新</td></tr>
+<tr><td>session.deleted</td><td>会话删除</td></tr>
+<tr><td>session.error</td><td>会话出错</td></tr>
+<tr><td>lsp.updated</td><td>LSP 状态变更</td></tr>
+<tr><td>mcp.*</td><td>MCP 服务器状态变更</td></tr>
+</table>
+</div>
+</div>
+
+<div class="section" id="ch10"><h2>十、去重与优先级策略</h2>
+<p>插件可能从多个配置源重复声明，系统通过 <span class="inline-code">deduplicatePlugins()</span> 确保每个插件只加载一次：</p>
+
+<pre><code>export function deduplicatePlugins(plugins: string[]): string[] {
+    const seenNames = new Set&lt;string>()
+    const uniqueSpecifiers: string[] = []
+
+    // 反向遍历：后出现的（高优先级）先被记录
+    for (const specifier of plugins.toReversed()) {
+        const name = getPluginName(specifier)
+        if (!seenNames.has(name)) {
+            seenNames.add(name)
+            uniqueSpecifiers.push(specifier)
+        }
+    }
+
+    // 再反转恢复原始顺序
+    return uniqueSpecifiers.toReversed()
+}
+
+// getPluginName 提取规范化名称
+getPluginName("file:///path/to/foo.js")  // "foo"
+getPluginName("oh-my-opencode@2.4.3")    // "oh-my-opencode"
+getPluginName("@scope/pkg@1.0.0")        // "@scope/pkg"</code></pre>
+
+<div class="card">
+<h3>优先级顺序（从高到低）</h3>
+<table>
+<tr><th>优先级</th><th>来源</th><th>说明</th></tr>
+<tr><td>1（最高）</td><td>.opencode/plugins/ 目录</td><td>本地插件目录</td></tr>
+<tr><td>2</td><td>项目 opencode.json</td><td>项目级配置</td></tr>
+<tr><td>3</td><td>全局 plugin/ 目录</td><td>用户级插件</td></tr>
+<tr><td>4</td><td>全局 opencode.json</td><td>用户级配置</td></tr>
+</table>
+<p>同名插件取高优先级版本，低优先级版本被丢弃。</p>
+</div>
+</div>
+
+<div class="section" id="ch11"><h2>十一、错误处理与容错</h2>
+<p>Plugin 系统在多个层面实现了容错：</p>
+
+<pre><code>// 1. Internal Plugin 加载失败 → 记录日志，继续
+for (const plugin of INTERNAL_PLUGINS) {
+    const init = await plugin(input).catch((err) => {
+        log.error("failed to load internal plugin", { name: plugin.name, error: err })
+    })
+    if (init) hooks.push(init)  // 失败则 init 为 undefined
+}
+
+// 2. NPM 安装失败 → 发 Error 事件，跳过
+plugin = await BunProc.install(pkg, version).catch((err) => {
+    Bus.publish(Session.Event.Error, {
+        error: new NamedError.Unknown({
+            message: `Failed to install plugin ${pkg}@${version}`,
+        }).toObject(),
+    })
+    return ""
+})
+
+// 3. 插件初始化失败 → 发 Error 事件，跳过
+await import(plugin).catch((err) => {
+    Bus.publish(Session.Event.Error, {
+        error: new NamedError.Unknown({
+            message: `Failed to load plugin ${plugin}`,
+        }).toObject(),
+    })
+})</code></pre>
+
+<div class="warn">
+<strong>关键设计决策：</strong>任何插件的加载失败都不会阻止整个系统启动。错误通过 Bus.publish 发布为 Session.Event.Error，前端可以在 UI 上展示这些错误。这是为了确保即使第三方插件 NPM 服务器不可达，用户仍然可以正常使用 OpenCode。
+</div>
+
+<div class="card" style="margin-top:24px">
+<h3>Plugin 系统架构总结</h3>
+<pre><code>┌─────────────────────────────────────────────────────┐
+│                    Plugin 系统                        │
+├───────────┬───────────────┬──────────────────────────┤
+│ Internal  │ Builtin (NPM) │ User (NPM / file://)     │
+│ CodexAuth │ anthropic-auth│ .opencode/plugins/*.ts   │
+│ CopilotAuth│              │ opencode.json "plugin"   │
+│ GitlabAuth│              │                           │
+├───────────┴───────────────┴──────────────────────────┤
+│                  state() 初始化                       │
+│  PluginInput { client, project, $, ... }             │
+│  → hooks: Hooks[]                                    │
+├─────────────────────────────────────────────────────┤
+│ trigger(name, input, output)                         │
+│  → 链式调用所有 hook[name]                            │
+│ init()                                               │
+│  → hook.config(cfg) 修改配置                          │
+│  → Bus.subscribeAll → hook.event({event}) 分发事件    │
+└─────────────────────────────────────────────────────┘</code></pre>
+</div>
+</div>
+
+</div>
+</body>
+</html>

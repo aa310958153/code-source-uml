@@ -1,0 +1,1168 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OpenCode TodoWrite 复杂任务防走偏 - 深度示例篇</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body { background: #f8fafc; color: #1e293b; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.7; }
+.hero { background: linear-gradient(135deg, #0f172a 0%, #1e3a5f 40%, #1e40af 100%); color: white; padding: 80px 40px; text-align: center; }
+.hero h1 { font-size: 2.6em; margin-bottom: 16px; }
+.hero p { font-size: 1.15em; opacity: 0.9; max-width: 900px; margin: 0 auto; }
+.hero .badge { display: inline-block; background: rgba(255,255,255,0.15); padding: 6px 16px; border-radius: 20px; margin-top: 16px; font-size: 0.88em; }
+.container { max-width: 1100px; margin: 0 auto; padding: 40px 24px; }
+.chapter { margin-bottom: 48px; }
+.chapter h2 { font-size: 1.8em; color: #1e293b; border-left: 4px solid #3b82f6; padding-left: 16px; margin-bottom: 24px; }
+.chapter h3 { font-size: 1.3em; color: #334155; margin: 20px 0 12px; }
+.chapter h4 { font-size: 1.1em; color: #475569; margin: 16px 0 8px; }
+.card { background: white; border-radius: 12px; padding: 28px; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); border: 1px solid #e2e8f0; }
+.card.highlight { border-left: 4px solid #3b82f6; }
+.card.warn { border-left: 4px solid #f59e0b; }
+.card.success { border-left: 4px solid #10b981; }
+.card.danger { border-left: 4px solid #ef4444; }
+.card.purple { border-left: 4px solid #8b5cf6; }
+pre { background: #1e293b; color: #e2e8f0; padding: 20px; border-radius: 8px; overflow-x: auto; font-size: 0.85em; line-height: 1.6; margin: 12px 0; }
+code { font-family: 'JetBrains Mono', 'Fira Code', Consolas, monospace; }
+.ic { background: #f1f5f9; padding: 2px 8px; border-radius: 4px; font-size: 0.9em; color: #be185d; }
+table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 0.92em; }
+th, td { padding: 10px 14px; text-align: left; border-bottom: 1px solid #e2e8f0; }
+th { background: #f8fafc; font-weight: 600; color: #475569; }
+.tag { display: inline-block; padding: 2px 10px; border-radius: 12px; font-size: 0.78em; font-weight: 600; margin: 2px; }
+.tag-blue { background: #dbeafe; color: #1d4ed8; }
+.tag-green { background: #d1fae5; color: #059669; }
+.tag-amber { background: #fef3c7; color: #d97706; }
+.tag-purple { background: #ede9fe; color: #7c3aed; }
+.tag-red { background: #fee2e2; color: #dc2626; }
+.tag-cyan { background: #cffafe; color: #0891b2; }
+.note { background: #eff6ff; border: 1px solid #bfdbfe; padding: 16px; border-radius: 8px; margin: 12px 0; }
+.note strong { color: #1d4ed8; }
+.note.warn-note { background: #fffbeb; border-color: #fde68a; }
+.note.warn-note strong { color: #d97706; }
+ul, ol { padding-left: 24px; margin: 8px 0; }
+li { margin: 6px 0; }
+svg { max-width: 100%; margin: 16px 0; }
+.phase { border: 2px solid #e2e8f0; border-radius: 16px; padding: 24px; margin: 24px 0; position: relative; }
+.phase-label { position: absolute; top: -14px; left: 24px; background: #3b82f6; color: white; padding: 4px 16px; border-radius: 20px; font-weight: 700; font-size: 0.9em; }
+.phase-label.plan { background: #8b5cf6; }
+.phase-label.danger { background: #ef4444; }
+.phase-label.recover { background: #10b981; }
+.model-view { background: #f0f9ff; border: 2px dashed #93c5fd; border-radius: 12px; padding: 20px; margin: 12px 0; }
+.model-view h4 { color: #1d4ed8; margin-top: 0; }
+.tool-result { background: #f0fdf4; border: 2px dashed #86efac; border-radius: 12px; padding: 20px; margin: 12px 0; }
+.tool-result h4 { color: #059669; margin-top: 0; }
+.decision { background: #fefce8; border: 2px dashed #fde047; border-radius: 12px; padding: 20px; margin: 12px 0; }
+.decision h4 { color: #ca8a04; margin-top: 0; }
+.todo-state { display: flex; gap: 8px; align-items: center; padding: 6px 12px; border-radius: 8px; margin: 4px 0; font-size: 0.92em; }
+.todo-pending { background: #f1f5f9; border-left: 3px solid #94a3b8; }
+.todo-progress { background: #eff6ff; border-left: 3px solid #3b82f6; }
+.todo-done { background: #f0fdf4; border-left: 3px solid #10b981; text-decoration: line-through; opacity: 0.7; }
+.grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+@media (max-width: 768px) { .grid-2 { grid-template-columns: 1fr; } }
+.flow-arrow { text-align: center; font-size: 1.5em; color: #94a3b8; margin: 8px 0; }
+</style>
+</head>
+<body>
+
+<div class="hero">
+  <h1>OpenCode 复杂任务防走偏</h1>
+  <p>TodoWrite 工具 + system-reminder + Doom Loop + max-steps + 子任务隔离 —— 六层防线如何让 AI 在复杂构建中不迷路</p>
+  <div class="badge">场景：添加用户认证系统（JWT + 数据库 + API + 测试 + CI） | 模型：Claude Sonnet | 8+ 轮 ReAct 循环</div>
+</div>
+
+<div class="container">
+
+<!-- TOC -->
+<div style="background: white; border: 2px solid #e2e8f0; border-radius: 12px; padding: 24px; margin-bottom: 28px;">
+  <h3 style="color: #2563eb; margin-bottom: 12px; font-size: 1.15em;">📑 目录</h3>
+  <ol style="columns: 2; column-gap: 30px; padding-left: 22px;">
+    <li style="margin: 6px 0;"><a href="#s1" style="color: #1e293b; text-decoration: none;">场景设定与问题定义</a></li>
+    <li style="margin: 6px 0;"><a href="#s2" style="color: #1e293b; text-decoration: none;">TodoWrite 工具架构全景</a></li>
+    <li style="margin: 6px 0;"><a href="#s3" style="color: #1e293b; text-decoration: none;">Phase 0：任务规划 — TodoWrite 首次调用</a></li>
+    <li style="margin: 6px 0;"><a href="#s4" style="color: #1e293b; text-decoration: none;">Phase 1：实现 JWT 工具 — 正常推进</a></li>
+    <li style="margin: 6px 0;"><a href="#s5" style="color: #1e293b; text-decoration: none;">Phase 2：走偏风险 — system-reminder 如何纠偏</a></li>
+    <li style="margin: 6px 0;"><a href="#s6" style="color: #1e293b; text-decoration: none;">Phase 3：Doom Loop 检测 — 同一工具重复调用拦截</a></li>
+    <li style="margin: 6px 0;"><a href="#s7" style="color: #1e293b; text-decoration: none;">Phase 4：子任务委派 — 权限隔离与 TodoWrite 阻断</a></li>
+    <li style="margin: 6px 0;"><a href="#s8" style="color: #1e293b; text-decoration: none;">Phase 5：max-steps 边界保护</a></li>
+    <li style="margin: 6px 0;"><a href="#s9" style="color: #1e293b; text-decoration: none;">六层防走偏机制全景图</a></li>
+    <li style="margin: 6px 0;"><a href="#s10" style="color: #1e293b; text-decoration: none;">Todo 数据持久化与状态机</a></li>
+    <li style="margin: 6px 0;"><a href="#s11" style="color: #1e293b; text-decoration: none;">Provider Prompt 中的 TodoWrite 指令差异</a></li>
+    <li style="margin: 6px 0;"><a href="#s12" style="color: #1e293b; text-decoration: none;">长任务中 Todo 如何不被上下文淹没</a></li>
+    <li style="margin: 6px 0;"><a href="#s13" style="color: #1e293b; text-decoration: none;">核心规律总结</a></li>
+  </ol>
+</div>
+
+<!-- ===== 第一章：场景设定 ===== -->
+<div class="chapter" id="s1">
+  <h2>场景设定与问题定义</h2>
+  <div class="card highlight">
+    <h3>用户输入</h3>
+    <div style="background: #f8fafc; padding: 16px; border-radius: 8px; font-size: 1.1em; border: 1px solid #e2e8f0;">
+      <strong>用户：</strong>"帮我给这个 Express 项目添加完整的用户认证系统，包括 JWT 令牌、用户注册登录 API、密码加密、数据库模型、单元测试，以及更新 CI 配置"
+    </div>
+    <p style="margin-top: 12px;"><strong>为什么这个任务容易走偏？</strong></p>
+    <table>
+      <tr><th>走偏风险</th><th>具体表现</th></tr>
+      <tr><td><span class="tag tag-red">范围蔓延</span></td><td>模型可能开始优化无关代码、重构现有架构、修改不相关的配置</td></tr>
+      <tr><td><span class="tag tag-amber">遗忘子任务</span></td><td>在 8+ 个子任务中，修完 Bug 后可能忘记回到 CI 配置或测试</td></tr>
+      <tr><td><span class="tag tag-purple">重复循环</span></td><td>反复读同一个文件、反复修改同一处代码（Doom Loop）</td></tr>
+      <tr><td><span class="tag tag-red">步数爆炸</span></td><td>无规划地执行导致循环次数超限，被强制终止</td></tr>
+      <tr><td><span class="tag tag-amber">子任务串扰</span></td><td>子 Agent 尝试修改父 Agent 的任务列表，造成状态混乱</td></tr>
+    </table>
+  </div>
+
+  <svg viewBox="0 0 1000 140" xmlns="http://www.w3.org/2000/svg">
+    <defs><marker id="a" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#94a3b8"/></marker></defs>
+    <rect x="5" y="45" width="120" height="50" rx="10" fill="#dbeafe" stroke="#3b82f6" stroke-width="2"/>
+    <text x="65" y="65" text-anchor="middle" font-size="11" font-weight="700" fill="#1e293b">TodoWrite</text>
+    <text x="65" y="80" text-anchor="middle" font-size="9" fill="#475569">任务规划</text>
+    <line x1="125" y1="70" x2="155" y2="70" stroke="#94a3b8" stroke-width="2" marker-end="url(#a)"/>
+
+    <rect x="160" y="45" width="100" height="50" rx="10" fill="#d1fae5" stroke="#10b981" stroke-width="2"/>
+    <text x="210" y="65" text-anchor="middle" font-size="10" font-weight="700" fill="#1e293b">JWT 工具</text>
+    <text x="210" y="80" text-anchor="middle" font-size="9" fill="#475569">Read→Edit</text>
+    <line x1="260" y1="70" x2="290" y2="70" stroke="#94a3b8" stroke-width="2" marker-end="url(#a)"/>
+
+    <rect x="295" y="45" width="100" height="50" rx="10" fill="#fef3c7" stroke="#f59e0b" stroke-width="2"/>
+    <text x="345" y="65" text-anchor="middle" font-size="10" font-weight="700" fill="#1e293b">用户 API</text>
+    <text x="345" y="80" text-anchor="middle" font-size="9" fill="#475569">Edit + Write</text>
+    <line x1="395" y1="70" x2="425" y2="70" stroke="#94a3b8" stroke-width="2" marker-end="url(#a)"/>
+
+    <rect x="430" y="45" width="100" height="50" rx="10" fill="#ede9fe" stroke="#8b5cf6" stroke-width="2"/>
+    <text x="480" y="65" text-anchor="middle" font-size="10" font-weight="700" fill="#1e293b">数据库</text>
+    <text x="480" y="80" text-anchor="middle" font-size="9" fill="#475569">Drizzle ORM</text>
+    <line x1="530" y1="70" x2="560" y2="70" stroke="#94a3b8" stroke-width="2" marker-end="url(#a)"/>
+
+    <rect x="565" y="45" width="100" height="50" rx="10" fill="#fee2e2" stroke="#ef4444" stroke-width="2"/>
+    <text x="615" y="65" text-anchor="middle" font-size="10" font-weight="700" fill="#1e293b">测试</text>
+    <text x="615" y="80" text-anchor="middle" font-size="9" fill="#475569">Bash vitest</text>
+    <line x1="665" y1="70" x2="695" y2="70" stroke="#94a3b8" stroke-width="2" marker-end="url(#a)"/>
+
+    <rect x="700" y="45" width="100" height="50" rx="10" fill="#cffafe" stroke="#0891b2" stroke-width="2"/>
+    <text x="750" y="65" text-anchor="middle" font-size="10" font-weight="700" fill="#1e293b">CI 配置</text>
+    <text x="750" y="80" text-anchor="middle" font-size="9" fill="#475569">Edit yml</text>
+    <line x1="800" y1="70" x2="830" y2="70" stroke="#94a3b8" stroke-width="2" marker-end="url(#a)"/>
+
+    <rect x="835" y="45" width="150" height="50" rx="10" fill="#d1fae5" stroke="#10b981" stroke-width="2"/>
+    <text x="910" y="65" text-anchor="middle" font-size="10" font-weight="700" fill="#1e293b">最终验证输出</text>
+    <text x="910" y="80" text-anchor="middle" font-size="9" fill="#475569">finish: stop</text>
+
+    <text x="500" y="125" text-anchor="middle" font-size="11" fill="#94a3b8">每个阶段之间都可能穿插 TodoWrite 状态更新、system-reminder 注入、Doom Loop 检测</text>
+  </svg>
+</div>
+
+<!-- ===== 第二章：TodoWrite 工具架构 ===== -->
+<div class="chapter" id="s2">
+  <h2>TodoWrite 工具架构全景</h2>
+
+  <div class="card highlight">
+    <h3>三层架构：工具定义 → 数据模型 → 存储</h3>
+    <pre><code>// ─── ① 工具定义层 (src/tool/todo.ts) ───
+export const TodoWriteTool = Tool.define("todowrite", {
+    description: DESCRIPTION_WRITE,    // ← 从 todowrite.txt 加载（168行指令）
+    parameters: z.object({
+        todos: z.array(z.object(Todo.Info.shape)),
+        //        ↑ 直接引用数据模型定义，保证类型一致
+    }),
+    async execute(params, ctx) {
+        // 权限检查 — 所有工具统一走 PermissionNext.ask()
+        await ctx.ask({
+            permission: "todowrite",
+            patterns: ["*"],
+            always: ["*"],         // ← 每次都需检查，不自动放行
+            metadata: {},
+        })
+        // 持久化到 SQLite
+        await Todo.update({
+            sessionID: ctx.sessionID,
+            todos: params.todos,
+        })
+        return {
+            title: `${params.todos.filter(x => x.status !== "completed").length} todos`,
+            //        ↑ 标题动态计算未完成数，在 UI 上实时展示
+            output: JSON.stringify(params.todos, null, 2),
+            metadata: { todos: params.todos },
+        }
+    },
+})
+
+// ─── ② 数据模型层 (src/session/todo.ts) ───
+export namespace Todo {
+    export const Info = z.object({
+        content: z.string().describe("Brief description of the task"),
+        status:  z.string().describe("pending | in_progress | completed | cancelled"),
+        priority: z.string().describe("high | medium | low"),
+    })
+    // 状态机：pending → in_progress → completed
+    //                  → cancelled
+}
+
+// ─── ③ 存储层 (SQLite) ───
+// TodoTable: session_id | content | status | priority | position
+// 写入策略：先 DELETE 全部，再 INSERT 新列表（全量覆盖）
+// 事件发布：Bus.publish(Event.Updated, ...) → UI 实时刷新</code></pre>
+    <div class="note">
+      <strong>关键设计决策：</strong>Todo 列表采用"全量替换"而非增量更新。每次调用 TodoWrite 都会删除旧列表、写入新列表。这简化了状态管理，但也意味着模型必须在每次调用时提供完整列表。
+    </div>
+  </div>
+
+  <div class="card warn">
+    <h3>权限隔离：子任务为什么不能操作 Todo？</h3>
+    <pre><code>// src/tool/task.ts — 创建子会话时注入权限规则
+const session = await Session.create({
+    parentID: ctx.sessionID,
+    title: params.description + ` (@${agent.name} subagent)`,
+    permission: [
+        { permission: "todowrite", pattern: "*", action: "deny" },  // ← 禁止写 Todo
+        { permission: "todoread", pattern: "*", action: "deny" },   // ← 禁止读 Todo
+        // 子 Agent 无法修改父 Agent 的任务列表
+    ],
+})
+
+// 同时在 tools 层面也禁用
+const result = await SessionPrompt.prompt({
+    sessionID: session.id,
+    tools: {
+        todowrite: false,   // ← 工具直接不注册
+        todoread: false,
+    },
+    ...
+})</code></pre>
+    <div class="note warn-note">
+      <strong>双重隔离：</strong>子 Agent 既在 permission 层面被 deny，又在 tools 注册层面被禁用。这意味着即使子 Agent 尝试调用 TodoWrite，工具根本不存在于它的可用工具集中。
+    </div>
+  </div>
+</div>
+
+<!-- ===== 第三章：Phase 0 — 任务规划 ===== -->
+<div class="chapter" id="s3">
+  <h2>Phase 0：任务规划 — TodoWrite 首次调用</h2>
+
+  <div class="phase">
+    <div class="phase-label plan">Step 1 — 规划</div>
+
+    <div class="model-view">
+      <h4>Step 1: 模型看到的 System Prompt 关键段落（anthropic.txt）</h4>
+      <pre><code># Task Management
+You have access to the TodoWrite tools to help you manage and plan tasks.
+Use these tools <strong>VERY frequently</strong> to ensure that you are tracking your tasks
+and giving the user visibility into your progress.
+These tools are also <strong>EXTREMELY helpful</strong> for planning tasks, and for
+breaking down larger complex tasks into smaller steps.
+<strong>If you do not use this tool when planning, you may forget to do important
+tasks - and that is unacceptable.</strong>
+
+It is critical that you mark todos as completed as soon as you are done
+with a task. Do not batch up multiple tasks before marking them as completed.</code></pre>
+    </div>
+
+    <div class="decision">
+      <h4>模型决策：先规划，再行动</h4>
+      <pre><code>// 模型输出 — ① 文字说明 + ② TodoWrite 工具调用
+[assistant text]:
+"I'll help add a complete user authentication system. Let me first plan
+the tasks and explore the codebase."
+
+[tool call]: TodoWrite({
+    todos: [
+        { content: "探索现有项目结构和依赖",         status: "in_progress", priority: "high" },
+        { content: "实现 JWT 工具模块 (sign/verify)",  status: "pending",     priority: "high" },
+        { content: "创建用户数据库模型 (Drizzle)",     status: "pending",     priority: "high" },
+        { content: "实现注册 API (POST /auth/register)", status: "pending",   priority: "high" },
+        { content: "实现登录 API (POST /auth/login)",    status: "pending",   priority: "high" },
+        { content: "实现认证中间件 (auth middleware)",   status: "pending",   priority: "high" },
+        { content: "编写单元测试",                      status: "pending",   priority: "medium" },
+        { content: "更新 CI 配置 (.github/workflows)",   status: "pending",   priority: "medium" },
+    ]
+})</code></pre>
+    </div>
+
+    <div class="tool-result">
+      <h4>TodoWrite 执行结果 → 返回给模型</h4>
+      <pre><code>// title: "8 todos"  ← UI 上显示 "8 todos"
+// output:
+[
+  { "content": "探索现有项目结构和依赖",         "status": "in_progress", "priority": "high" },
+  { "content": "实现 JWT 工具模块 (sign/verify)",  "status": "pending",     "priority": "high" },
+  ...
+]
+// → 同时 Bus.publish(Event.Updated) → UI 实时刷新 Todo 面板</code></pre>
+    </div>
+
+    <p>模型随后调用 Read/Glob 工具探索项目结构，完成后立刻更新 Todo：</p>
+
+    <pre><code>// 探索完成后 — 立刻标记第一个为 completed，开始第二个
+[tool call]: TodoWrite({
+    todos: [
+        { content: "探索现有项目结构和依赖",         status: "<strong>completed</strong>",   priority: "high" },
+        { content: "实现 JWT 工具模块 (sign/verify)",  status: "<strong>in_progress</strong>", priority: "high" },
+        // ... 其余不变
+    ]
+})</code></pre>
+
+    <div class="note">
+      <strong>防走偏第一层 — 锚定效应：</strong>TodoWrite 的首次调用将任务分解为 8 个具体步骤，这些步骤会作为后续所有循环的"锚点"。模型在每一步都能看到完整的任务列表，知道自己应该做什么、做到哪里了。
+    </div>
+  </div>
+</div>
+
+<!-- ===== 第四章：Phase 1 — 正常推进 ===== -->
+<div class="chapter" id="s4">
+  <h2>Phase 1：实现 JWT 工具 — 正常推进</h2>
+
+  <div class="phase">
+    <div class="phase-label">Step 2-3 — 实现</div>
+
+    <div class="model-view">
+      <h4>Step 2: 模型看到的历史消息（含 TodoWrite 结果）</h4>
+      <pre><code>messages: [
+  { role: "user",      content: "帮我给这个 Express 项目添加完整的用户认证系统..." },
+  { role: "assistant", content: [
+      { type: "text",       text: "I'll help add..." },
+      { type: "tool-call",  tool: "todowrite", state: "completed",
+        output: '[{"content":"探索...","status":"completed"},...]' },
+      { type: "tool-call",  tool: "read",      state: "completed",
+        output: "&lt;path&gt;src/index.ts&lt;/path&gt;..." },
+      { type: "tool-call",  tool: "glob",      state: "completed",
+        output: "src/routes/... src/models/..." },
+  ]},
+  // ↑ 模型在 Step 2 看到了自己之前的 Todo 列表 → 知道下一步是 "实现 JWT 工具"
+]</code></pre>
+    </div>
+
+    <p>模型依次完成 JWT 工具模块、数据库模型、API 路由。每完成一个子任务立刻调用 TodoWrite 更新状态：</p>
+
+    <div class="grid-2">
+      <div class="card success">
+        <h4>Step 2 结束时</h4>
+        <div class="todo-done">✓ 探索现有项目结构和依赖</div>
+        <div class="todo-done">✓ 实现 JWT 工具模块 (sign/verify)</div>
+        <div class="todo-progress">⟳ 创建用户数据库模型 (Drizzle)</div>
+        <div class="todo-pending">○ 实现注册 API</div>
+        <div class="todo-pending">○ 实现登录 API</div>
+        <div class="todo-pending">○ 实现认证中间件</div>
+        <div class="todo-pending">○ 编写单元测试</div>
+        <div class="todo-pending">○ 更新 CI 配置</div>
+      </div>
+      <div class="card success">
+        <h4>Step 3 结束时</h4>
+        <div class="todo-done">✓ 探索现有项目结构和依赖</div>
+        <div class="todo-done">✓ 实现 JWT 工具模块 (sign/verify)</div>
+        <div class="todo-done">✓ 创建用户数据库模型 (Drizzle)</div>
+        <div class="todo-progress">⟳ 实现注册 API</div>
+        <div class="todo-pending">○ 实现登录 API</div>
+        <div class="todo-pending">○ 实现认证中间件</div>
+        <div class="todo-pending">○ 编写单元测试</div>
+        <div class="todo-pending">○ 更新 CI 配置</div>
+      </div>
+    </div>
+
+    <div class="note">
+      <strong>关键机制：</strong>TodoWrite 的 title 字段动态计算未完成数。Step 2 结束时显示 "6 todos"，Step 3 结束时显示 "5 todos"。用户在 UI 上实时看到进度推进，模型在上下文中看到自己完成了哪些、还剩哪些。
+    </div>
+  </div>
+</div>
+
+<!-- ===== 第五章：Phase 2 — 走偏风险 ===== -->
+<div class="chapter" id="s5">
+  <h2>Phase 2：走偏风险 — system-reminder 如何纠偏</h2>
+
+  <div class="phase">
+    <div class="phase-label danger">走偏风险</div>
+
+    <h3>场景：用户在 Step 4 中途插入消息</h3>
+    <div style="background: #fef2f2; padding: 16px; border-radius: 8px; border: 1px solid #fecaca; margin: 12px 0;">
+      <strong>用户（中途插入）：</strong>"对了，顺便帮我看看 src/utils/format.ts 有个 lint 警告能不能修一下"
+    </div>
+
+    <p>这是一个典型的走偏场景：用户在任务进行中追加了一个与主线无关的请求。如果不加处理，模型可能修完 lint 后忘记回到认证任务。</p>
+
+    <div class="model-view">
+      <h4>Step 5: 模型看到的用户消息被 system-reminder 包装</h4>
+      <pre><code>// prompt.ts 第 631-647 行 — step > 1 时的消息包装
+if (step > 1 && lastFinished) {
+    for (const msg of msgs) {
+        if (msg.info.role !== "user" || msg.info.id <= lastFinished.id) continue
+        for (const part of msg.parts) {
+            if (part.type !== "text" || part.ignored || part.synthetic) continue
+            if (!part.text.trim()) continue
+            part.text = [
+                "&lt;system-reminder&gt;",
+                "The user sent the following message:",
+                part.text,
+                "",
+                "Please address this message <strong>and continue with your tasks</strong>.",
+                "&lt;/system-reminder&gt;",
+            ].join("\n")
+        }
+    }
+}
+
+// 模型实际看到的是：
+"&lt;system-reminder&gt;
+The user sent the following message:
+对了，顺便帮我看看 src/utils/format.ts 有个 lint 警告能不能修一下
+
+Please address this message <strong>and continue with your tasks</strong>.
+&lt;/system-reminder&gt;"</code></pre>
+    </div>
+
+    <div class="decision">
+      <h4>模型的决策 — 修完 lint 后自动回到主线</h4>
+      <pre><code>[assistant text]:
+"I'll fix the lint warning in format.ts first, then continue with the
+authentication implementation."
+
+// ① 快速修 lint（1 步）
+[tool call]: Read({ filePath: "src/utils/format.ts" })
+[tool call]: Edit({ filePath: "src/utils/format.ts", ... })
+
+// ② 回到主线 — 因为 system-reminder 中的 "continue with your tasks"
+// 加上历史消息中的 TodoWrite 结果提醒模型还有 5 个任务未完成
+[tool call]: TodoWrite({
+    todos: [
+        ...前 3 个 completed,
+        { content: "实现注册 API",         status: "completed", priority: "high" },
+        { content: "实现登录 API",         status: "in_progress", priority: "high" },
+        // ...
+    ]
+})</code></pre>
+    </div>
+
+    <div class="note">
+      <strong>防走偏第二层 — system-reminder 包装：</strong>当 step > 1 时，用户新发的消息被包裹在 <code>&lt;system-reminder&gt;</code> 标签中，并附加"and continue with your tasks"指令。这明确告诉模型：处理完用户的新请求后，必须回到之前的任务。
+    </div>
+  </div>
+</div>
+
+<!-- ===== 第六章：Phase 3 — Doom Loop ===== -->
+<div class="chapter" id="s6">
+  <h2>Phase 3：Doom Loop 检测 — 同一工具重复调用拦截</h2>
+
+  <div class="phase">
+    <div class="phase-label danger">Doom Loop 风险</div>
+
+    <h3>场景：模型在实现登录 API 时陷入循环</h3>
+    <p>模型修改 login 路由后发现类型错误，反复 Read 同一个文件试图理解问题：</p>
+
+    <div class="model-view">
+      <h4>processor.ts — Doom Loop 检测核心逻辑</h4>
+      <pre><code>// src/session/processor.ts
+const DOOM_LOOP_THRESHOLD = 3
+
+// 在 "tool-call" 事件处理中：
+const parts = await MessageV2.parts(input.assistantMessage.id)
+const lastThree = parts.slice(-DOOM_LOOP_THRESHOLD)
+
+if (
+    lastThree.length === DOOM_LOOP_THRESHOLD &&
+    lastThree.every(p =>
+        p.type === "tool" &&
+        p.tool === value.toolName &&                    // ← 同一个工具
+        p.state.status !== "pending" &&
+        JSON.stringify(p.state.input) ===               // ← 相同参数
+            JSON.stringify(value.input)
+    )
+) {
+    // 触发 Doom Loop 保护 — 要求用户确认
+    await PermissionNext.ask({
+        permission: "doom_loop",
+        patterns: [value.toolName],
+        sessionID: input.assistantMessage.sessionID,
+        metadata: {
+            tool: value.toolName,
+            input: value.input,
+        },
+    })
+}</code></pre>
+    </div>
+
+    <div class="decision">
+      <h4>实际触发场景</h4>
+      <pre><code>// 模型连续 3 次调用 Read，参数完全相同：
+tool-call #1: Read({ filePath: "src/routes/auth.ts" }) → 返回文件内容
+tool-call #2: Read({ filePath: "src/routes/auth.ts" }) → 返回文件内容
+tool-call #3: Read({ filePath: "src/routes/auth.ts" }) → ⚠️ Doom Loop!
+
+// 系统弹出确认对话框：
+"模型正在重复调用 Read 工具（参数相同），是否允许继续？"
+  → [允许] → 模型继续（可能确实需要刷新文件内容）
+  → [拒绝] → processor 返回 "stop"，循环中断
+
+// 这防止了：
+// 1. 无意义的 token 消耗（反复读同一个大文件）
+// 2. 模型在死循环中耗尽 max-steps
+// 3. 上下文被重复的工具结果淹没</code></pre>
+    </div>
+
+    <div class="note">
+      <strong>防走偏第三层 — Doom Loop 检测：</strong>当检测到连续 3 次相同工具 + 相同参数的调用时，系统暂停执行并要求用户确认。这防止了模型在死循环中浪费资源和步数。
+    </div>
+  </div>
+</div>
+
+<!-- ===== 第七章：Phase 4 — 子任务隔离 ===== -->
+<div class="chapter" id="s7">
+  <h2>Phase 4：子任务委派 — 权限隔离与 TodoWrite 阻断</h2>
+
+  <div class="phase">
+    <div class="phase-label recover">子任务委派</div>
+
+    <h3>场景：模型委派 explore Agent 研究 bcrypt 最佳实践</h3>
+    <pre><code>// Step 5: 模型决定委派一个子任务
+[tool call]: Task({
+    description: "研究 bcrypt 最佳实践",
+    subagent_type: "explore",
+    prompt: "Search the codebase and web for the best practices on using
+             bcrypt with Node.js. Specifically:
+             1. What salt rounds should we use?
+             2. How to properly hash and compare passwords?
+             Return a concise summary with code examples."
+})</code></pre>
+
+    <div class="model-view">
+      <h4>子 Agent 会话创建 — 权限隔离</h4>
+      <pre><code>// task.ts 创建子会话
+const session = await Session.create({
+    parentID: ctx.sessionID,              // ← 指向父会话
+    title: "研究 bcrypt 最佳实践 (@explore subagent)",
+    permission: [
+        { permission: "todowrite", pattern: "*", action: "deny" },  // ← 不能写 Todo
+        { permission: "todoread", pattern: "*", action: "deny" },   // ← 不能读 Todo
+        // 子 Agent 看不到也改不了父 Agent 的任务列表
+    ],
+})
+
+// 工具注册层面也禁用
+await SessionPrompt.prompt({
+    sessionID: session.id,
+    tools: {
+        todowrite: false,   // ← 工具不注册
+        todoread: false,    // ← 工具不注册
+        task: false,        // ← 子 Agent 不能再创建孙 Agent（除非有 task 权限）
+    },
+    ...
+})
+
+// 子 Agent 的返回结果被包裹在标签中
+const output = [
+    `task_id: ${session.id} (for resuming to continue this task if needed)`,
+    "",
+    "&lt;task_result&gt;",
+    text,                    // ← 子 Agent 的最终文字输出
+    "&lt;/task_result&gt;",
+].join("\n")</code></pre>
+    </div>
+
+    <div class="note">
+      <strong>防走偏第四层 — 子任务权限隔离：</strong>子 Agent 无法操作 TodoWrite/TodoRead。这防止了子 Agent 意外修改父 Agent 的任务列表，造成状态混乱。父 Agent 的任务规划只有自己能修改。
+    </div>
+
+    <p style="margin-top: 16px;">子 Agent 完成后，父 Agent 收到结果，继续按照自己的 Todo 列表推进：</p>
+
+    <pre><code>// 子 Agent 返回结果后，父 Agent 看到：
+"task_id: ses_02JHX... (for resuming to continue this task if needed)
+
+&lt;task_result&gt;
+bcrypt 最佳实践：
+1. 使用 10-12 salt rounds（生产环境推荐 12）
+2. hash 示例: await bcrypt.hash(password, 12)
+3. compare 示例: await bcrypt.compare(input, storedHash)
+...
+&lt;/task_result&gt;"
+
+// 父 Agent 继续实现密码加密，更新 Todo
+[tool call]: TodoWrite({
+    todos: [
+        ...前 3 个 completed,
+        { content: "实现注册 API (含 bcrypt 加密)", status: "in_progress", priority: "high" },
+        // ...
+    ]
+})</code></pre>
+  </div>
+</div>
+
+<!-- ===== 第八章：Phase 5 — max-steps ===== -->
+<div class="chapter" id="s8">
+  <h2>Phase 5：max-steps 边界保护</h2>
+
+  <div class="phase">
+    <div class="phase-label danger">步数边界</div>
+
+    <h3>场景：Agent 配置了 maxSteps = 25，当前 step 达到 25</h3>
+
+    <div class="model-view">
+      <h4>prompt.ts — max-steps 注入机制</h4>
+      <pre><code>// prompt.ts 第 558-560 行
+const agent = await Agent.get(lastUser.agent)
+const maxSteps = agent.steps ?? Infinity    // ← 从 Agent 配置读取
+const isLastStep = step >= maxSteps          // ← 判断是否到达上限
+
+// 第 666-673 行 — 在最后一步注入额外消息
+const result = await processor.process({
+    messages: [
+        ...MessageV2.toModelMessages(msgs, model),
+        ...(isLastStep ? [{
+            role: "assistant" as const,
+            content: MAX_STEPS,    // ← 注入 max-steps.txt 的内容
+        }] : []),
+    ],
+    ...
+})</code></pre>
+    </div>
+
+    <div class="decision">
+      <h4>max-steps.txt — 模型看到的最后警告</h4>
+      <pre><code>// src/session/prompt/max-steps.txt
+CRITICAL - MAXIMUM STEPS REACHED
+
+The maximum number of steps allowed for this task has been reached.
+Tools are disabled until next user input. Respond with text only.
+
+STRICT REQUIREMENTS:
+1. Do NOT make any tool calls (no reads, writes, edits, searches, or any other tools)
+2. MUST provide a text response summarizing work done so far
+3. This constraint overrides ALL other instructions
+
+Response must include:
+- Statement that maximum steps for this agent have been reached
+- Summary of what has been accomplished so far
+- List of any remaining tasks that were not completed
+- Recommendations for what should be done next</code></pre>
+    </div>
+
+    <div class="model-view">
+      <h4>模型被迫输出最终总结（无法再调用工具）</h4>
+      <pre><code>[assistant text]:
+"Maximum steps reached. Here's a summary:
+
+## Completed
+- JWT utility module (src/utils/jwt.ts)
+- User database model (src/db/schema.ts)
+- Register API (POST /auth/register) with bcrypt password hashing
+- Login API (POST /auth/login) with JWT token response
+- Auth middleware (src/middleware/auth.ts)
+
+## Remaining (2 tasks)
+1. Unit tests — tests are written but not yet verified with vitest
+2. CI config — .github/workflows/ci.yml needs auth test step added
+
+## Recommendations
+- Run `bun test` to verify all tests pass
+- Add `test:auth` script to package.json and update CI pipeline"</code></pre>
+    </div>
+
+    <div class="note">
+      <strong>防走偏第五层 — max-steps 边界：</strong>Agent 可配置最大循环步数。到达上限时，系统注入一条"禁止调用工具"的消息，强制模型输出总结。这防止了无限循环和资源滥用。
+    </div>
+  </div>
+</div>
+
+<!-- ===== 第九章：六层防走偏全景 ===== -->
+<div class="chapter" id="s9">
+  <h2>六层防走偏机制全景图</h2>
+
+  <div class="card highlight">
+    <h3>从用户输入到最终输出的完整防线</h3>
+    <svg viewBox="0 0 950 520" xmlns="http://www.w3.org/2000/svg">
+      <!-- Layer 1 -->
+      <rect x="20" y="20" width="910" height="70" rx="12" fill="#eff6ff" stroke="#3b82f6" stroke-width="2"/>
+      <text x="50" y="45" font-size="13" font-weight="700" fill="#1d4ed8">第 1 层：TodoWrite 任务规划（锚定）</text>
+      <text x="50" y="68" font-size="11" fill="#475569">模型收到复杂任务后第一步调用 TodoWrite 创建任务列表 → 后续每步都能看到完整计划 → 不会遗忘子任务</text>
+
+      <!-- Layer 2 -->
+      <rect x="20" y="100" width="910" height="70" rx="12" fill="#fef3c7" stroke="#f59e0b" stroke-width="2"/>
+      <text x="50" y="125" font-size="13" font-weight="700" fill="#d97706">第 2 层：system-reminder 消息包装（纠偏）</text>
+      <text x="50" y="148" font-size="11" fill="#475569">step > 1 时用户新消息被包裹为 &lt;system-reminder&gt; + "continue with your tasks" → 模型处理完旁枝后回到主线</text>
+
+      <!-- Layer 3 -->
+      <rect x="20" y="180" width="910" height="70" rx="12" fill="#fee2e2" stroke="#ef4444" stroke-width="2"/>
+      <text x="50" y="205" font-size="13" font-weight="700" fill="#dc2626">第 3 层：Doom Loop 检测（阻断循环）</text>
+      <text x="50" y="228" font-size="11" fill="#475569">连续 3 次相同工具 + 相同参数 → PermissionNext.ask("doom_loop") → 用户确认是否继续 → 防止死循环</text>
+
+      <!-- Layer 4 -->
+      <rect x="20" y="260" width="910" height="70" rx="12" fill="#ede9fe" stroke="#8b5cf6" stroke-width="2"/>
+      <text x="50" y="285" font-size="13" font-weight="700" fill="#7c3aed">第 4 层：子任务权限隔离（防串扰）</text>
+      <text x="50" y="308" font-size="11" fill="#475569">子 Agent 的 permission 中 todowrite/todoread 被 deny + tools 中不注册 → 子 Agent 无法修改父 Agent 任务列表</text>
+
+      <!-- Layer 5 -->
+      <rect x="20" y="340" width="910" height="70" rx="12" fill="#d1fae5" stroke="#10b981" stroke-width="2"/>
+      <text x="50" y="365" font-size="13" font-weight="700" fill="#059669">第 5 层：max-steps 边界（兜底）</text>
+      <text x="50" y="388" font-size="11" fill="#475569">达到 Agent 配置的 maxSteps 后 → 注入 MAX_STEPS 消息 → 禁止工具调用 → 强制模型输出总结</text>
+
+      <!-- Layer 6 -->
+      <rect x="20" y="420" width="910" height="80" rx="12" fill="#cffafe" stroke="#0891b2" stroke-width="2"/>
+      <text x="50" y="445" font-size="13" font-weight="700" fill="#0891b2">第 6 层：Compaction 上下文压缩（防溢出）</text>
+      <text x="50" y="468" font-size="11" fill="#475569">当 token 数超过模型上下文窗口 → 自动触发 Compaction → 压缩旧消息但保留关键信息 → 防止因上下文丢失而走偏</text>
+      <text x="50" y="488" font-size="11" fill="#475569">SessionCompaction.isOverflow() 检查 + Prune 裁剪旧工具输出 → "[Old tool result content cleared]"</text>
+    </svg>
+  </div>
+
+  <div class="card warn">
+    <h3>各层防线的触发时机</h3>
+    <table>
+      <tr><th>防线</th><th>触发位置</th><th>触发条件</th><th>作用</th></tr>
+      <tr>
+        <td><span class="tag tag-blue">TodoWrite</span></td>
+        <td>模型自主决策</td>
+        <td>复杂任务（3+ 步骤）</td>
+        <td>创建任务清单，锚定后续行为</td>
+      </tr>
+      <tr>
+        <td><span class="tag tag-amber">system-reminder</span></td>
+        <td>prompt.ts loop()</td>
+        <td>step > 1 && 用户有新消息</td>
+        <td>包装消息 + 提醒"继续你的任务"</td>
+      </tr>
+      <tr>
+        <td><span class="tag tag-red">Doom Loop</span></td>
+        <td>processor.ts</td>
+        <td>连续 3 次相同工具+参数</td>
+        <td>暂停执行，要求用户确认</td>
+      </tr>
+      <tr>
+        <td><span class="tag tag-purple">权限隔离</span></td>
+        <td>task.ts</td>
+        <td>创建子 Agent 会话时</td>
+        <td>deny todowrite/todoread</td>
+      </tr>
+      <tr>
+        <td><span class="tag tag-green">max-steps</span></td>
+        <td>prompt.ts loop()</td>
+        <td>step >= agent.steps</td>
+        <td>禁止工具，强制输出总结</td>
+      </tr>
+      <tr>
+        <td><span class="tag tag-cyan">Compaction</span></td>
+        <td>prompt.ts + processor.ts</td>
+        <td>token 超限 或 finish-step 溢出</td>
+        <td>压缩历史，保留关键信息</td>
+      </tr>
+    </table>
+  </div>
+</div>
+
+<!-- ===== 第十章：Todo 数据持久化 ===== -->
+<div class="chapter" id="s10">
+  <h2>Todo 数据持久化与状态机</h2>
+
+  <div class="card">
+    <h3>SQLite 存储结构</h3>
+    <pre><code>// TodoTable (src/session/session.sql.ts)
+// ┌────────────┬──────────────────────────────────┬─────────────┬──────────┬──────────┐
+// │ session_id │ content                          │ status      │ priority │ position │
+// ├────────────┼──────────────────────────────────┼─────────────┼──────────┼──────────┤
+// │ ses_01HXK  │ 探索现有项目结构和依赖            │ completed   │ high     │ 0        │
+// │ ses_01HXK  │ 实现 JWT 工具模块 (sign/verify)   │ completed   │ high     │ 1        │
+// │ ses_01HXK  │ 创建用户数据库模型 (Drizzle)      │ completed   │ high     │ 2        │
+// │ ses_01HXK  │ 实现注册 API                      │ in_progress │ high     │ 3        │
+// │ ses_01HXK  │ 实现登录 API                      │ pending     │ high     │ 4        │
+// │ ses_01HXK  │ 实现认证中间件                    │ pending     │ high     │ 5        │
+// │ ses_01HXK  │ 编写单元测试                      │ pending     │ medium   │ 6        │
+// │ ses_01HXK  │ 更新 CI 配置                      │ pending     │ medium   │ 7        │
+// └────────────┴──────────────────────────────────┴─────────────┴──────────┴──────────┘</code></pre>
+  </div>
+
+  <div class="card success">
+    <h3>状态机转换</h3>
+    <svg viewBox="0 0 700 200" xmlns="http://www.w3.org/2000/svg">
+      <defs><marker id="b" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#3b82f6"/></marker></defs>
+
+      <rect x="20" y="70" width="120" height="50" rx="10" fill="#f1f5f9" stroke="#94a3b8" stroke-width="2"/>
+      <text x="80" y="100" text-anchor="middle" font-size="14" font-weight="700" fill="#475569">pending</text>
+
+      <line x1="140" y1="95" x2="210" y2="95" stroke="#3b82f6" stroke-width="2" marker-end="url(#b)"/>
+      <text x="175" y="85" text-anchor="middle" font-size="10" fill="#3b82f6">开始工作</text>
+
+      <rect x="215" y="70" width="130" height="50" rx="10" fill="#dbeafe" stroke="#3b82f6" stroke-width="2"/>
+      <text x="280" y="100" text-anchor="middle" font-size="14" font-weight="700" fill="#1d4ed8">in_progress</text>
+
+      <line x1="345" y1="80" x2="430" y2="55" stroke="#10b981" stroke-width="2" marker-end="url(#b)"/>
+      <text x="395" y="50" text-anchor="middle" font-size="10" fill="#10b981">完成</text>
+
+      <rect x="435" y="30" width="130" height="50" rx="10" fill="#d1fae5" stroke="#10b981" stroke-width="2"/>
+      <text x="500" y="60" text-anchor="middle" font-size="14" font-weight="700" fill="#059669">completed</text>
+
+      <line x1="345" y1="110" x2="430" y2="145" stroke="#ef4444" stroke-width="2" marker-end="url(#b)"/>
+      <text x="395" y="145" text-anchor="middle" font-size="10" fill="#ef4444">取消</text>
+
+      <rect x="435" y="120" width="130" height="50" rx="10" fill="#fee2e2" stroke="#ef4444" stroke-width="2"/>
+      <text x="500" y="150" text-anchor="middle" font-size="14" font-weight="700" fill="#dc2626">cancelled</text>
+
+      <text x="350" y="195" text-anchor="middle" font-size="11" fill="#94a3b8">in_progress 同一时刻最多 1 个（todowrite.txt 明确规定）</text>
+    </svg>
+  </div>
+
+  <div class="card purple">
+    <h3>事件驱动 — UI 实时刷新</h3>
+    <pre><code>// 每次 Todo.update() 执行后：
+Bus.publish(Event.Updated, {
+    sessionID: input.sessionID,
+    todos: input.todos,
+})
+
+// Event 定义：
+export const Event = {
+    Updated: BusEvent.define(
+        "todo.updated",
+        z.object({
+            sessionID: z.string(),
+            todos: z.array(Info),
+        }),
+    ),
+}
+
+// 前端订阅 "todo.updated" 事件 → 重新渲染 Todo 面板
+// 用户看到的效果：每完成一个任务，面板上的进度条前进一格</code></pre>
+  </div>
+</div>
+
+<!-- ===== 第十一章：Provider Prompt 差异 ===== -->
+<div class="chapter" id="s11">
+  <h2>Provider Prompt 中的 TodoWrite 指令差异</h2>
+
+  <div class="card">
+    <h3>不同 Provider 的 TodoWrite 引导力度</h3>
+    <table>
+      <tr><th>Provider</th><th>TodoWrite 相关指令</th><th>强度</th></tr>
+      <tr>
+        <td><span class="tag tag-blue">Anthropic</span></td>
+        <td>"Use these tools VERY frequently" + "If you do not use this tool when planning, you may forget to do important tasks — and that is <strong>unacceptable</strong>"</td>
+        <td><span class="tag tag-red">极强</span></td>
+      </tr>
+      <tr>
+        <td><span class="tag tag-green">Gemini</span></td>
+        <td>"Plan: Build a coherent and grounded plan... share an extremely concise yet clear plan" （间接引导，未直接提及 TodoWrite）</td>
+        <td><span class="tag tag-amber">中等</span></td>
+      </tr>
+      <tr>
+        <td><span class="tag tag-purple">Beast</span></td>
+        <td>"Create a todo list in markdown format to track your progress" + "You MUST keep working until the problem is completely solved, and all items in the todo list are checked off"</td>
+        <td><span class="tag tag-red">极强</span></td>
+      </tr>
+      <tr>
+        <td><span class="tag tag-cyan">Qwen</span></td>
+        <td>类似 Anthropic 的 Task Management 段落</td>
+        <td><span class="tag tag-amber">强</span></td>
+      </tr>
+      <tr>
+        <td><span class="tag tag-gray">Copilot GPT-5</span></td>
+        <td>类似的 planning 指令</td>
+        <td><span class="tag tag-amber">强</span></td>
+      </tr>
+    </table>
+  </div>
+
+  <div class="card highlight">
+    <h3>Anthropic prompt 中的 TodoWrite 示例（教学式引导）</h3>
+    <pre><code>// anthropic.txt 中的 &lt;example&gt; 教模型如何使用 TodoWrite
+
+&lt;example&gt;
+user: Run the build and fix any type errors
+assistant: I'm going to use the TodoWrite tool to write the following items:
+- Run the build
+- Fix any type errors
+
+I'm now going to run the build using Bash.
+
+Looks like I found 10 type errors. I'm going to use the TodoWrite tool
+to write 10 items to the todo list.
+
+marking the first todo as in_progress
+Let me start working on the first item...
+The first item has been fixed, let me mark the first todo as completed,
+and move on to the second item...
+&lt;/example&gt;
+
+// 关键行为模式：
+// 1. 收到任务 → 立刻 TodoWrite 创建列表
+// 2. 发现新问题 → TodoWrite 追加新项
+// 3. 开始一个任务 → 标记为 in_progress
+// 4. 完成一个任务 → 立刻标记为 completed（不批量）
+// 5. 所有任务完成 → 循环自然结束</code></pre>
+  </div>
+</div>
+
+<!-- ===== 第十二章：长任务中 Todo 如何不被上下文淹没 ===== -->
+<div class="chapter" id="s12">
+  <h2>长任务中 Todo 如何不被上下文淹没</h2>
+
+  <div class="card danger">
+    <h3>核心问题：10 步任务，前 8 步上下文已经爆炸</h3>
+    <p>假设一个 10 步任务，每步调用 2-3 个工具（Read/Edit/Bash），每步产生 5K-20K tokens 的工具输出。到第 8 步时：</p>
+    <table>
+      <tr><th>Step</th><th>累积工具调用</th><th>估算 tokens</th><th>TodoWrite 输出状态</th></tr>
+      <tr><td>1</td><td>TodoWrite + Read + Glob</td><td>~8K</td><td><span class="tag tag-green">完整可见</span></td></tr>
+      <tr><td>2</td><td>TodoWrite + Read + Edit</td><td>~20K</td><td><span class="tag tag-green">完整可见</span></td></tr>
+      <tr><td>3</td><td>TodoWrite + Edit + Edit</td><td>~35K</td><td><span class="tag tag-green">完整可见</span></td></tr>
+      <tr><td>4</td><td>TodoWrite + Read + Bash</td><td>~55K</td><td><span class="tag tag-green">完整可见</span></td></tr>
+      <tr><td>5</td><td>TodoWrite + Task(子任务) + Edit</td><td>~80K</td><td><span class="tag tag-amber">Step 1 输出可能被 Prune</span></td></tr>
+      <tr><td>6</td><td>TodoWrite + Edit + Bash(test)</td><td>~110K</td><td><span class="tag tag-amber">Step 1-2 输出被 Prune</span></td></tr>
+      <tr><td>7</td><td>TodoWrite + Edit + Edit</td><td>~140K</td><td><span class="tag tag-red">Step 1-3 输出被 Prune</span></td></tr>
+      <tr><td>8</td><td>TodoWrite + Bash(lint) + Edit</td><td>~170K</td><td><span class="tag tag-red">可能触发 Compaction</span></td></tr>
+    </table>
+    <p style="margin-top: 12px;"><strong>关键问题：</strong>旧的 TodoWrite 工具输出被 Prune 清除后，模型还能看到自己的任务列表吗？</p>
+  </div>
+
+  <div class="card highlight">
+    <h3>答案：Todo 数据和上下文是分离的两套系统</h3>
+    <svg viewBox="0 0 900 300" xmlns="http://www.w3.org/2000/svg">
+      <defs><marker id="c" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#3b82f6"/></marker></defs>
+      <!-- Context Window -->
+      <rect x="20" y="20" width="400" height="260" rx="12" fill="#fef2f2" stroke="#ef4444" stroke-width="2"/>
+      <text x="220" y="45" text-anchor="middle" font-size="14" font-weight="700" fill="#dc2626">上下文窗口（会丢失）</text>
+      <text x="40" y="70" font-size="11" fill="#475569">System Prompt (每次重建)</text>
+      <text x="40" y="90" font-size="11" fill="#475569">Step 1 TodoWrite 输出 → [Old tool result cleared]</text>
+      <text x="40" y="110" font-size="11" fill="#475569">Step 2 Read 输出 → [Old tool result cleared]</text>
+      <text x="40" y="130" font-size="11" fill="#475569">Step 3 Edit 输出 → [Old tool result cleared]</text>
+      <text x="40" y="150" font-size="11" fill="#059669" font-weight="700">Step 7 TodoWrite 输出 → 完整 JSON (最近)</text>
+      <text x="40" y="170" font-size="11" fill="#059669" font-weight="700">Step 8 Read/Edit 输出 → 完整</text>
+      <text x="40" y="200" font-size="12" fill="#dc2626" font-weight="700">⚠ 旧的 TodoWrite 输出被清除</text>
+      <text x="40" y="225" font-size="12" fill="#dc2626">模型看不到 Step 1-4 的 Todo JSON 了</text>
+      <text x="40" y="250" font-size="11" fill="#94a3b8">PRUNE_PROTECT = 40,000 tokens（保留最近 40K）</text>
+
+      <!-- SQLite -->
+      <rect x="470" y="20" width="400" height="260" rx="12" fill="#eff6ff" stroke="#3b82f6" stroke-width="2"/>
+      <text x="670" y="45" text-anchor="middle" font-size="14" font-weight="700" fill="#1d4ed8">SQLite TodoTable（永不丢失）</text>
+      <text x="490" y="70" font-size="11" fill="#475569">session_id | content | status | priority | position</text>
+      <text x="490" y="95" font-size="11" fill="#059669">✓ 探索现有项目结构和依赖 | completed | high | 0</text>
+      <text x="490" y="115" font-size="11" fill="#059669">✓ 实现 JWT 工具模块 | completed | high | 1</text>
+      <text x="490" y="135" font-size="11" fill="#059669">✓ 创建用户数据库模型 | completed | high | 2</text>
+      <text x="490" y="155" font-size="11" fill="#059669">✓ 实现注册 API | completed | high | 3</text>
+      <text x="490" y="175" font-size="11" fill="#059669">✓ 实现登录 API | completed | high | 4</text>
+      <text x="490" y="195" font-size="11" fill="#3b82f6">⟳ 实现认证中间件 | in_progress | high | 5</text>
+      <text x="490" y="215" font-size="11" fill="#94a3b8">○ 编写单元测试 | pending | medium | 6</text>
+      <text x="490" y="235" font-size="11" fill="#94a3b8">○ 更新 CI 配置 | pending | medium | 7</text>
+      <text x="490" y="260" font-size="12" fill="#1d4ed8" font-weight="700">TodoRead/Write 每次从 DB 读写</text>
+
+      <!-- Arrow -->
+      <line x1="420" y1="160" x2="465" y2="160" stroke="#3b82f6" stroke-width="3" marker-end="url(#c)"/>
+      <text x="442" y="150" text-anchor="middle" font-size="9" fill="#3b82f6">TodoRead</text>
+    </svg>
+  </div>
+
+  <div class="card success">
+    <h3>机制一：Prune — 智能裁剪旧工具输出</h3>
+    <pre><code>// compaction.ts — Prune 核心算法
+export const PRUNE_MINIMUM = 20_000    // 最少要裁剪 20K tokens
+export const PRUNE_PROTECT = 40_000    // 保护最近 40K tokens 不被裁剪
+const PRUNE_PROTECTED_TOOLS = ["skill"] // 只有 skill 工具永不裁剪
+
+// 算法：从最新消息往回扫描
+for (let msgIndex = msgs.length - 1; msgIndex >= 0; msgIndex--) {
+    // 跳过最近 2 轮对话（turns &lt; 2 的不裁剪）
+    if (turns &lt; 2) continue
+    // 遇到上次 compaction 的摘要消息就停止
+    if (msg.info.role === "assistant" && msg.info.summary) break
+
+    for (let partIndex = msg.parts.length - 1; partIndex >= 0; partIndex--) {
+        const part = msg.parts[partIndex]
+        if (part.type === "tool" && part.state.status === "completed") {
+            total += Token.estimate(part.state.output)
+            if (total > PRUNE_PROTECT) {     // 超过 40K 阈值
+                toPrune.push(part)           // 标记为待裁剪
+            }
+        }
+    }
+}
+
+// 被裁剪的工具输出在 toModelMessages 中变成：
+"[Old tool result content cleared]"
+
+// 关键：TodoWrite 的输出也会被裁剪！
+// 但 Todo 数据本身在 SQLite 中完好无损</code></pre>
+    <div class="note">
+      <strong>Prune 调用时机：</strong>在 loop() 循环完全结束后（prompt.ts 第 716 行 <code>SessionCompaction.prune({sessionID})</code>），为下一次对话清理上下文。这意味着在同一个 loop 内，Prune 不会中途清除工具输出。
+    </div>
+  </div>
+
+  <div class="card success">
+    <h3>机制二：Compaction — 上下文溢出时的智能摘要</h3>
+    <pre><code>// 当 token 数超过模型上下文窗口时自动触发
+// compaction.ts — isOverflow 检测
+const count = tokens.total || tokens.input + tokens.output + cache.read + cache.write
+const usable = model.limit.input - reserved  // 或 context - maxOutputTokens
+return count >= usable   // true → 触发 Compaction
+
+// Compaction 使用专门的 compaction agent 生成摘要
+// 摘要模板（defaultPrompt）：
+`## Goal
+[What goal(s) is the user trying to accomplish?]
+
+## Instructions
+[What important instructions did the user give you?]
+
+## Discoveries
+[What notable things were learned during this conversation?]
+
+## Accomplished
+[What work has been <strong>completed</strong>, what is <strong>in progress</strong>,
+ and what work is <strong>left</strong>?]
+       ↑ 这里自然包含 Todo 状态
+
+## Relevant files / directories
+[Construct a structured list of relevant files]`
+
+// 摘要完成后，filterCompacted 截断历史：
+// [旧消息1] [旧消息2] ... [compaction part] ← 截断点
+// [摘要消息] [新消息...] ← 模型只看到这些</code></pre>
+    <div class="note warn-note">
+      <strong>Compaction 的风险：</strong>摘要由 AI 生成，可能遗漏某些 Todo 项。Compaction 后模型看到的是一段文字总结，而非结构化的 Todo JSON。这就是为什么 todoread.txt 指示模型"在不确定时调用 TodoRead 刷新状态"。
+    </div>
+  </div>
+
+  <div class="card success">
+    <h3>机制三：TodoRead — 模型随时刷新 Todo 状态</h3>
+    <pre><code>// todoread.txt — 工具描述明确要求频繁使用
+"You should make use of this tool as often as possible,
+ especially in the following situations:
+ - At the beginning of conversations to see what's pending
+ - Before starting new tasks to prioritize work
+ - When the user asks about previous tasks or plans
+ - Whenever you're uncertain about what to do next
+ - After completing tasks to update your understanding of remaining work
+ - <strong>After every few messages to ensure you're on track</strong>"
+
+// TodoReadTool 实现 (src/tool/todo.ts)
+export const TodoReadTool = Tool.define("todoread", {
+    description: "Use this tool to read your todo list",
+    parameters: z.object({}),
+    async execute(_params, ctx) {
+        const todos = await Todo.get(ctx.sessionID)
+        //     ↑ 直接从 SQLite 读取最新状态
+        // 不管上下文多乱，DB 永远是干净的
+        return { output: JSON.stringify(todos, null, 2), ... }
+    },
+})</code></pre>
+  </div>
+
+  <div class="card purple">
+    <h3>机制四：TodoWrite 全量替换 — 每次都是完整快照</h3>
+    <pre><code>// Todo.update() — 全量覆盖策略
+export function update(input: { sessionID: string; todos: Info[] }) {
+    Database.transaction((db) => {
+        // ① 先删除该 session 的全部 Todo
+        db.delete(TodoTable).where(eq(TodoTable.session_id, input.sessionID)).run()
+        if (input.todos.length === 0) return
+        // ② 再插入新列表
+        db.insert(TodoTable)
+            .values(input.todos.map((todo, position) => ({
+                session_id: input.sessionID,
+                content: todo.content,
+                status: todo.status,
+                priority: todo.priority,
+                position,
+            })))
+            .run()
+    })
+    Bus.publish(Event.Updated, input)  // → UI 实时刷新
+}
+
+// 这意味着：
+// - 模型每次调用 TodoWrite 都必须提供 <strong>完整列表</strong>（不是增量）
+// - SQLite 中永远保存的是最新、最完整的任务状态
+// - 即使上下文中的旧 TodoWrite 输出全部被清除
+//   模型只需调用一次 TodoRead，就能恢复完整的任务地图</code></pre>
+  </div>
+
+  <div class="card warn">
+    <h3>完整场景：Step 8 时上下文是什么样？</h3>
+    <pre><code>// Step 8 开始时，模型看到的消息历史（假设 Prune 在 Step 6 后触发过）：
+messages: [
+  // System Prompt (每次重建，基本不变)
+  { role: "system", content: "You are OpenCode..." },
+
+  // Step 1-3 的工具输出已被裁剪
+  { role: "assistant", parts: [
+      { type: "tool-todowrite", output: "[Old tool result content cleared]" },
+      { type: "tool-read",      output: "[Old tool result content cleared]" },
+      { type: "tool-edit",      output: "[Old tool result content cleared]" },
+  ]},
+
+  // Step 4-5 可能保留部分内容
+  { role: "assistant", parts: [
+      { type: "tool-todowrite", output: "[{...部分 JSON...}]" },  // 可能保留
+      { type: "tool-task",      output: "[Old tool result content cleared]" },
+  ]},
+
+  // Step 6-7 完整保留（在 PRUNE_PROTECT 40K 范围内）
+  { role: "assistant", parts: [
+      { type: "text", text: "I've implemented the login API..." },
+      { type: "tool-todowrite", output: "[
+          {content: '探索...', status: 'completed'},
+          {content: 'JWT...', status: 'completed'},
+          ...
+          {content: '认证中间件', status: 'in_progress'},
+          {content: '测试', status: 'pending'},
+          {content: 'CI', status: 'pending'}  ← 完整的 Todo JSON！
+      ]" },
+      { type: "tool-edit", output: "...完整 diff..." },
+  ]},
+
+  // Step 8 — 当前轮
+]
+
+// 关键点：
+// ① 最近的 TodoWrite 输出（Step 7）在 PRUNE_PROTECT 范围内，<strong>完整可见</strong>
+// ② 旧的 TodoWrite 输出（Step 1-3）被替换为 "[Old tool result content cleared]"
+// ③ 但模型只需要看 <strong>最近一次</strong> TodoWrite 的输出就知道当前状态
+// ④ 如果不确定，随时调用 TodoRead 从 SQLite 刷新
+// ⑤ 如果触发 Compaction，摘要会包含"已完成/进行中/剩余"信息</code></pre>
+  </div>
+
+  <div class="card danger" style="margin-top: 16px;">
+    <h3>总结：为什么 10 步任务到第 8 步不会丢失 Todo？</h3>
+    <ol>
+      <li><strong>Prune 保留最近 40K tokens</strong> — 最近 1-2 次 TodoWrite 输出一定在保护范围内</li>
+      <li><strong>TodoWrite 全量替换</strong> — 最近一次输出就包含完整的任务列表，不需要看旧版本</li>
+      <li><strong>SQLite 持久化</strong> — 即使上下文全部丢失，TodoRead 一行就能恢复</li>
+      <li><strong>Compaction 摘要</strong> — 如果触发压缩，摘要模板包含"已完成/进行中/剩余"</li>
+      <li><strong>todoread.txt 指令</strong> — 明确要求"after every few messages"调用 TodoRead 确认状态</li>
+      <li><strong>UI 面板</strong> — Bus 事件驱动 Todo 面板实时刷新，用户可以随时看到进度</li>
+    </ol>
+    <p style="margin-top: 12px;">本质上，<strong>上下文是有损的，但数据库是无损的</strong>。Todo 系统的设计哲学是：不依赖上下文来保存任务状态，而是通过 SQLite 作为"单一真相源"，上下文只是展示层。</p>
+  </div>
+</div>
+
+<!-- ===== 第十三章：总结 ===== -->
+<div class="chapter" id="s13">
+  <h2>核心规律总结</h2>
+
+  <div class="grid-2">
+    <div class="card success">
+      <h3>1. TodoWrite 是锚，不是锁</h3>
+      <p>TodoWrite 给模型提供了一个"任务地图"，但不会强制执行。模型仍然可能跳过某些任务。真正起作用的是：Todo 列表在每轮循环中都出现在消息历史中，模型通过 pattern matching 被持续引导。</p>
+    </div>
+    <div class="card success">
+      <h3>2. system-reminder 是纠偏器</h3>
+      <p>当用户中途插入消息时，<code>&lt;system-reminder&gt;</code> 标签中的 "continue with your tasks" 指令确保模型不会偏离主线。这是一个"软约束"，通过 prompt engineering 实现。</p>
+    </div>
+    <div class="card success">
+      <h3>3. Doom Loop 是硬刹车</h3>
+      <p>Doom Loop 检测是唯一一个"硬约束"——通过代码逻辑检测重复调用，直接暂停执行。阈值设为 3 次，既不会误判正常重试，又能及时阻止死循环。</p>
+    </div>
+    <div class="card success">
+      <h3>4. 子任务隔离是防火墙</h3>
+      <p>子 Agent 对 TodoWrite/TodoRead 的双重 deny（permission + tools 注册）确保任务列表的"单一写者"原则——只有父 Agent 能修改自己的 Todo。</p>
+    </div>
+    <div class="card success">
+      <h3>5. max-steps 是兜底</h3>
+      <p>无论前面的防线是否生效，max-steps 保证循环一定会终止。到达上限后，模型被迫输出总结，让用户知道还有什么没做完。</p>
+    </div>
+    <div class="card success">
+      <h3>6. Compaction 是氧气面罩</h3>
+      <p>当上下文窗口溢出时，Compaction 压缩旧消息但保留关键信息（包括 Todo 状态）。这防止模型因"失忆"而重做已完成的任务或遗忘未完成的任务。</p>
+    </div>
+  </div>
+
+  <div class="card danger" style="margin-top: 20px;">
+    <h3>防走偏 ≠ 防犯错</h3>
+    <p>以上六层机制解决的是"任务方向"问题（模型是否在做正确的事），而不是"执行质量"问题（模型是否把事做好了）。如果模型在实现 JWT 工具时写了错误的代码，TodoWrite 和 Doom Loop 都无法检测到——这需要通过<strong>测试</strong>（Bash 运行 vitest）和<strong>代码审查</strong>（委派 code-reviewer Agent）来保证。</p>
+    <p style="margin-top: 12px;">TodoWrite 的最大价值不在于"强制模型按计划执行"，而在于<strong>让模型和用户共享同一张任务地图</strong>。当用户看到 Todo 面板上的进度时，他们可以判断模型是否在正确的方向上，并在必要时介入纠偏。</p>
+  </div>
+</div>
+
+</div>
+</body>
+</html>

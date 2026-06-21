@@ -1,0 +1,700 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OpenCode Guides 层实现原理</title>
+<style>
+:root { --primary: #2563eb; --secondary: #7c3aed; --success: #10b981; --warning: #f59e0b; --danger: #ef4444; --info: #06b6d4; --bg: #f8fafc; --card: #fff; --text: #1e293b; --muted: #64748b; --border: #e2e8f0; --code-bg: #0f172a; }
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Noto Sans SC', sans-serif; line-height: 1.8; color: var(--text); background: var(--bg); }
+.container { max-width: 1100px; margin: 0 auto; padding: 20px; }
+.hero { background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 50%, #312e81 100%); color: white; padding: 60px 30px; text-align: center; border-radius: 24px; margin-bottom: 30px; position: relative; overflow: hidden; }
+.hero::before { content: ''; position: absolute; top: -50%; left: -50%; width: 200%; height: 200%; background: radial-gradient(circle, rgba(99,102,241,0.1) 0%, transparent 70%); }
+.hero h1 { font-size: 2.4em; margin-bottom: 15px; position: relative; }
+.hero .subtitle { color: #a5b4fc; font-size: 1.15em; max-width: 800px; margin: 0 auto 20px; position: relative; }
+.hero .tags { display: flex; justify-content: center; gap: 12px; flex-wrap: wrap; position: relative; }
+.hero .tag { background: rgba(255,255,255,0.12); padding: 6px 16px; border-radius: 20px; font-size: 0.9em; border: 1px solid rgba(255,255,255,0.2); }
+.toc { background: var(--card); border: 2px solid var(--border); border-radius: 16px; padding: 24px; margin-bottom: 28px; }
+.toc h3 { color: var(--primary); margin-bottom: 12px; font-size: 1.15em; }
+.toc ol { columns: 2; column-gap: 30px; padding-left: 22px; }
+.toc li { margin: 6px 0; }
+.toc a { color: var(--text); text-decoration: none; }
+.toc a:hover { color: var(--primary); text-decoration: underline; }
+.section { background: var(--card); border-radius: 18px; padding: 32px; margin-bottom: 28px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.07), 0 2px 4px -2px rgba(0,0,0,0.05); }
+.section h2 { color: var(--primary); font-size: 1.5em; margin-bottom: 20px; padding-bottom: 12px; border-bottom: 3px solid var(--primary); }
+.section h3 { color: var(--secondary); font-size: 1.2em; margin: 24px 0 12px 0; }
+.section h4 { color: var(--text); font-size: 1.05em; margin: 18px 0 8px 0; }
+pre { background: var(--code-bg); color: #e2e8f0; padding: 20px; border-radius: 12px; overflow-x: auto; margin: 16px 0; font-family: 'JetBrains Mono', 'Fira Code', monospace; font-size: 0.88em; line-height: 1.7; }
+code { background: #e2e8f0; padding: 2px 7px; border-radius: 4px; font-family: 'JetBrains Mono', 'Fira Code', monospace; font-size: 0.88em; }
+pre code { background: transparent; padding: 0; }
+.box { padding: 18px 22px; border-radius: 0 12px 12px 0; margin: 18px 0; font-size: 0.98em; line-height: 1.9; }
+.box-blue { background: linear-gradient(135deg, #dbeafe, #bfdbfe); border-left: 4px solid var(--primary); }
+.box-green { background: linear-gradient(135deg, #d1fae5, #a7f3d0); border-left: 4px solid var(--success); }
+.box-purple { background: linear-gradient(135deg, #ede9fe, #ddd6fe); border-left: 4px solid var(--secondary); }
+.box-yellow { background: linear-gradient(135deg, #fef3c7, #fde68a); border-left: 4px solid var(--warning); }
+.box-red { background: linear-gradient(135deg, #fee2e2, #fecaca); border-left: 4px solid var(--danger); }
+.box-cyan { background: linear-gradient(135deg, #cffafe, #a5f3fc); border-left: 4px solid var(--info); }
+table { width: 100%; border-collapse: collapse; margin: 16px 0; border-radius: 12px; overflow: hidden; box-shadow: 0 2px 4px rgba(0,0,0,0.06); }
+th { background: var(--primary); color: white; padding: 14px 16px; text-align: left; font-weight: 600; font-size: 0.95em; }
+td { padding: 12px 16px; border-bottom: 1px solid var(--border); font-size: 0.95em; }
+tr:nth-child(even) { background: #f8fafc; }
+tr:hover { background: #f1f5f9; }
+.diagram-container { background: white; border: 2px solid var(--border); border-radius: 16px; margin: 20px 0; overflow-x: auto; }
+.step { display: flex; gap: 16px; margin: 16px 0; padding: 20px; background: linear-gradient(135deg, #f8fafc, #f1f5f9); border-radius: 14px; border-left: 5px solid var(--primary); }
+.step.green { border-left-color: var(--success); }
+.step.purple { border-left-color: var(--secondary); }
+.step.yellow { border-left-color: var(--warning); }
+.step.red { border-left-color: var(--danger); }
+.step .num { min-width: 40px; height: 40px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 1.1em; color: white; background: var(--primary); flex-shrink: 0; }
+.step.green .num { background: var(--success); }
+.step.purple .num { background: var(--secondary); }
+.step.yellow .num { background: var(--warning); }
+.step.red .num { background: var(--danger); }
+.step .content { flex: 1; }
+.step .title { font-weight: 700; font-size: 1.05em; margin-bottom: 6px; }
+.step .desc { color: var(--muted); margin-top: 8px; }
+.adv-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; margin: 20px 0; }
+.adv-card { background: white; border: 2px solid var(--border); border-radius: 14px; padding: 20px; transition: transform 0.2s, box-shadow 0.2s; }
+.adv-card:hover { transform: translateY(-2px); box-shadow: 0 8px 16px rgba(0,0,0,0.1); }
+.adv-card .icon { font-size: 2em; margin-bottom: 10px; }
+.adv-card h4 { color: var(--primary); margin-bottom: 8px; font-size: 1.05em; }
+.adv-card p { color: var(--muted); font-size: 0.95em; }
+.footer { text-align: center; padding: 30px; color: var(--muted); border-top: 1px solid var(--border); margin-top: 30px; }
+ul, ol { margin: 10px 0; padding-left: 22px; }
+li { margin: 6px 0; }
+</style>
+</head>
+<body>
+<div class="container">
+
+<div class="hero">
+    <h1>🧭 OpenCode Guides 层实现原理</h1>
+    <p class="subtitle">
+        深度解析 OpenCode 如何通过多层指令组装，告诉 Agent "你是谁、能做什么、该怎么做"。<br>
+        一套从 Provider Prompt 到 AGENTS.md 的完整引导架构。
+    </p>
+    <div class="tags">
+        <span class="tag">System Prompt 组装</span>
+        <span class="tag">Provider Prompt 选择</span>
+        <span class="tag">AGENTS.md 指令发现</span>
+        <span class="tag">子目录 resolve</span>
+        <span class="tag">Claim 防重复</span>
+        <span class="tag">Agent Prompt 个性化</span>
+    </div>
+</div>
+
+<div class="toc">
+    <h3>📑 目录</h3>
+    <ol>
+        <li><a href="#s1">核心洞察：Guides 层是什么</a></li>
+        <li><a href="#s2">System Prompt 的三层组装</a></li>
+        <li><a href="#s3">Provider Prompt：模型人格选择</a></li>
+        <li><a href="#s4">Environment：动态环境注入</a></li>
+        <li><a href="#s5">Instruction 指令系统：AGENTS.md 发现与加载</a></li>
+        <li><a href="#s6">子目录指令发现（resolve）</a></li>
+        <li><a href="#s7">Claim 机制：防止重复注入</a></li>
+        <li><a href="#s8">Config Instructions：用户自定义指令</a></li>
+        <li><a href="#s9">Agent Prompt：每个 Agent 的个性化引导</a></li>
+        <li><a href="#s10">Reminders：运行时上下文提醒</a></li>
+        <li><a href="#s11">LLM.stream 最终组装</a></li>
+        <li><a href="#s12">设计优势总结</a></li>
+    </ol>
+</div>
+
+<!-- Section 1 -->
+<div class="section" id="s1">
+    <h2>一、核心洞察：Guides 层是什么</h2>
+
+    <div class="box box-blue">
+        <strong>一句话定义：</strong>Guides 层是 Agent 的"大脑操作系统" —— 它不参与推理，但决定了 Agent 以什么身份、遵循什么规则、拥有什么信息来开始每一次推理。<br><br>
+        如果把 LLM 比作大脑，那 Guides 就是<strong>注入大脑的操作系统</strong>：身份认同、行为准则、环境认知。
+    </div>
+
+    <div class="diagram-container" style="padding: 25px;">
+        <svg width="850" height="340" viewBox="0 0 850 340">
+            <text x="425" y="28" text-anchor="middle" fill="#1e293b" font-size="16" font-weight="bold">Guides 层回答的三个核心问题</text>
+            <g transform="translate(20,50)">
+                <rect width="260" height="260" rx="16" fill="#dbeafe" stroke="#93c5fd" stroke-width="2"/>
+                <text x="130" y="30" text-anchor="middle" fill="#1e40af" font-size="14" font-weight="bold">🪪 你是谁？</text>
+                <text x="130" y="55" text-anchor="middle" fill="#64748b" font-size="11">Provider Prompt</text>
+                <text x="20" y="85" fill="#1e293b" font-size="11">• "You are OpenCode"</text>
+                <text x="20" y="105" fill="#1e293b" font-size="11">• 语气风格、行为规范</text>
+                <text x="20" y="125" fill="#1e293b" font-size="11">• 工具使用策略</text>
+                <text x="20" y="145" fill="#1e293b" font-size="11">• 代码引用格式</text>
+                <text x="20" y="175" fill="#64748b" font-size="10">不同模型有不同人格：</text>
+                <text x="20" y="195" fill="#1e40af" font-size="10">Claude → anthropic.txt (106行)</text>
+                <text x="20" y="215" fill="#1e40af" font-size="10">GPT → beast.txt (148行)</text>
+                <text x="20" y="235" fill="#1e40af" font-size="10">Gemini → gemini.txt (155行)</text>
+            </g>
+            <g transform="translate(300,50)">
+                <rect width="260" height="260" rx="16" fill="#d1fae5" stroke="#6ee7b7" stroke-width="2"/>
+                <text x="130" y="30" text-anchor="middle" fill="#065f46" font-size="14" font-weight="bold">📍 你在哪？</text>
+                <text x="130" y="55" text-anchor="middle" fill="#64748b" font-size="11">Environment + Instructions</text>
+                <text x="20" y="85" fill="#1e293b" font-size="11">• 工作目录路径</text>
+                <text x="20" y="105" fill="#1e293b" font-size="11">• 是否 Git 仓库</text>
+                <text x="20" y="125" fill="#1e293b" font-size="11">• 操作系统平台</text>
+                <text x="20" y="145" fill="#1e293b" font-size="11">• 今天的日期</text>
+                <text x="20" y="175" fill="#64748b" font-size="10">+ 项目级指令：</text>
+                <text x="20" y="195" fill="#065f46" font-size="10">AGENTS.md 代码风格</text>
+                <text x="20" y="215" fill="#065f46" font-size="10">子目录级指令</text>
+                <text x="20" y="235" fill="#065f46" font-size="10">config.instructions URL</text>
+            </g>
+            <g transform="translate(580,50)">
+                <rect width="250" height="260" rx="16" fill="#ede9fe" stroke="#a78bfa" stroke-width="2"/>
+                <text x="125" y="30" text-anchor="middle" fill="#5b21b6" font-size="14" font-weight="bold">🎯 你该怎么做？</text>
+                <text x="125" y="55" text-anchor="middle" fill="#64748b" font-size="11">Agent Prompt + Reminders</text>
+                <text x="20" y="85" fill="#1e293b" font-size="11">• explore: 只读搜索专家</text>
+                <text x="20" y="105" fill="#1e293b" font-size="11">• plan: 只规划不执行</text>
+                <text x="20" y="125" fill="#1e293b" font-size="11">• compaction: 压缩摘要</text>
+                <text x="20" y="145" fill="#1e293b" font-size="11">• build: 全功能默认</text>
+                <text x="20" y="175" fill="#64748b" font-size="10">+ 运行时提醒：</text>
+                <text x="20" y="195" fill="#5b21b6" font-size="10">Plan 模式激活/退出</text>
+                <text x="20" y="215" fill="#5b21b6" font-size="10">Max Steps 达到上限</text>
+                <text x="20" y="235" fill="#5b21b6" font-size="10">Read 时子目录指令</text>
+            </g>
+        </svg>
+    </div>
+</div>
+
+<!-- Section 2 -->
+<div class="section" id="s2">
+    <h2>二、System Prompt 的三层组装</h2>
+    <p>每一次 LLM 调用，System Prompt 都由以下三层动态拼装而成：</p>
+
+    <div class="diagram-container" style="padding: 25px;">
+        <svg width="850" height="320" viewBox="0 0 850 320">
+            <text x="425" y="28" text-anchor="middle" fill="#1e293b" font-size="15" font-weight="bold">System Prompt 三层组装（在 LLM.stream 中完成）</text>
+            <g transform="translate(50,50)">
+                <rect width="220" height="230" rx="14" fill="#dbeafe" stroke="#93c5fd" stroke-width="2"/>
+                <text x="110" y="25" text-anchor="middle" fill="#1e40af" font-size="13" font-weight="bold">第一层：Agent Prompt</text>
+                <text x="110" y="48" text-anchor="middle" fill="#64748b" font-size="10">或 Provider Prompt</text>
+                <line x1="16" y1="58" x2="204" y2="58" stroke="#93c5fd" stroke-width="1"/>
+                <text x="16" y="78" fill="#1e293b" font-size="11">优先级：agent.prompt</text>
+                <text x="16" y="98" fill="#1e293b" font-size="11">若 Agent 无 prompt →</text>
+                <text x="16" y="118" fill="#1e293b" font-size="11">  使用 provider(model)</text>
+                <text x="16" y="148" fill="#64748b" font-size="10">例：build Agent 无 prompt</text>
+                <text x="16" y="168" fill="#64748b" font-size="10">→ 使用 anthropic.txt</text>
+                <text x="16" y="198" fill="#1e40af" font-size="10">explore Agent 有 prompt</text>
+                <text x="16" y="218" fill="#1e40af" font-size="10">→ 使用 explore.txt</text>
+            </g>
+            <text x="290" y="170" fill="#7c3aed" font-size="22">+</text>
+            <g transform="translate(310,50)">
+                <rect width="220" height="230" rx="14" fill="#d1fae5" stroke="#6ee7b7" stroke-width="2"/>
+                <text x="110" y="25" text-anchor="middle" fill="#065f46" font-size="13" font-weight="bold">第二层：Environment</text>
+                <text x="110" y="48" text-anchor="middle" fill="#64748b" font-size="10">+ Instructions</text>
+                <line x1="16" y1="58" x2="204" y2="58" stroke="#6ee7b7" stroke-width="1"/>
+                <text x="16" y="78" fill="#1e293b" font-size="11">SystemPrompt.environment()</text>
+                <text x="16" y="98" fill="#1e293b" font-size="11">• 模型名、平台、日期</text>
+                <text x="16" y="118" fill="#1e293b" font-size="11">• 工作目录、Git 状态</text>
+                <text x="16" y="148" fill="#1e293b" font-size="11">InstructionPrompt.system()</text>
+                <text x="16" y="168" fill="#1e293b" font-size="11">• AGENTS.md 内容</text>
+                <text x="16" y="188" fill="#1e293b" font-size="11">• config.instructions 文件</text>
+                <text x="16" y="208" fill="#1e293b" font-size="11">• config.instructions URL</text>
+            </g>
+            <text x="550" y="170" fill="#7c3aed" font-size="22">+</text>
+            <g transform="translate(570,50)">
+                <rect width="220" height="230" rx="14" fill="#ede9fe" stroke="#a78bfa" stroke-width="2"/>
+                <text x="110" y="25" text-anchor="middle" fill="#5b21b6" font-size="13" font-weight="bold">第三层：User System</text>
+                <text x="110" y="48" text-anchor="middle" fill="#64748b" font-size="10">+ Plugin Transform</text>
+                <line x1="16" y1="58" x2="204" y2="58" stroke="#a78bfa" stroke-width="1"/>
+                <text x="16" y="78" fill="#1e293b" font-size="11">input.user.system</text>
+                <text x="16" y="98" fill="#1e293b" font-size="11">• 用户消息自带的系统指令</text>
+                <text x="16" y="128" fill="#1e293b" font-size="11">Plugin.trigger(</text>
+                <text x="16" y="148" fill="#1e293b" font-size="11">  "experimental.chat</text>
+                <text x="16" y="168" fill="#1e293b" font-size="11">   .system.transform")</text>
+                <text x="16" y="198" fill="#5b21b6" font-size="10">插件可动态修改系统提示</text>
+                <text x="16" y="218" fill="#5b21b6" font-size="10">如注入自定义 header</text>
+            </g>
+        </svg>
+    </div>
+
+    <pre><code>// llm.ts — System Prompt 组装核心逻辑
+const system = []
+system.push(
+  [
+    // 1. 使用 agent prompt 或 provider prompt
+    ...(input.agent.prompt ? [input.agent.prompt]
+       : isCodex ? [] : SystemPrompt.provider(input.model)),
+    // 2. 外部传入的 system（environment + instructions）
+    ...input.system,
+    // 3. 用户消息自带的 system
+    ...(input.user.system ? [input.user.system] : []),
+  ]
+  .filter((x) => x)
+  .join("\n"),
+)</code></pre>
+</div>
+
+<!-- Section 3 -->
+<div class="section" id="s3">
+    <h2>三、Provider Prompt：模型人格选择</h2>
+    <p>不同的 LLM 模型需要不同的引导风格。<code>SystemPrompt.provider()</code> 根据模型 ID 自动选择：</p>
+
+    <table>
+        <tr><th>模型</th><th>Prompt 文件</th><th>行数</th><th>核心特点</th></tr>
+        <tr><td>Claude</td><td>anthropic.txt</td><td>106</td><td>"You are OpenCode" 标准人格，含 TodoWrite 示例</td></tr>
+        <tr><td>GPT-5</td><td>codex_header.txt</td><td>80</td><td>精简人格，强调编辑约束和前端任务指南</td></tr>
+        <tr><td>GPT-4/o1/o3</td><td>beast.txt</td><td>148</td><td>"自主 Agent" 模式，强制 webfetch + 无限迭代</td></tr>
+        <tr><td>Gemini</td><td>gemini.txt</td><td>155</td><td>Gemini 特化版本</td></tr>
+        <tr><td>Trinity</td><td>trinity.txt</td><td>97</td><td>Trinity 模型专用</td></tr>
+        <tr><td>其他</td><td>qwen.txt</td><td>109</td><td>不含 TodoWrite 指令的通用版本</td></tr>
+    </table>
+
+    <pre><code>// system.ts — Provider Prompt 选择
+export function provider(model: Provider.Model) {
+  if (model.api.id.includes("gpt-5")) return [PROMPT_CODEX]
+  if (model.api.id.includes("gpt-") || model.api.id.includes("o1"))
+    return [PROMPT_BEAST]
+  if (model.api.id.includes("gemini-")) return [PROMPT_GEMINI]
+  if (model.api.id.includes("claude")) return [PROMPT_ANTHROPIC]
+  if (model.api.id.toLowerCase().includes("trinity")) return [PROMPT_TRINITY]
+  return [PROMPT_ANTHROPIC_WITHOUT_TODO]
+}</code></pre>
+
+    <div class="box box-purple">
+        <strong>为什么不同模型需要不同 Prompt？</strong><br>
+        不同模型对指令的敏感度不同。Claude 擅长遵循结构化指令，GPT 系列更适合"自主 Agent"式的长迭代，
+        Gemini 对系统提示的解析方式又有差异。Provider Prompt 是模型适配的第一道关卡。
+    </div>
+</div>
+
+<!-- Section 4 -->
+<div class="section" id="s4">
+    <h2>四、Environment：动态环境注入</h2>
+    <p><code>SystemPrompt.environment()</code> 在每次对话时动态生成，确保 Agent 始终知道当前的运行环境：</p>
+
+    <pre><code>// system.ts — 环境信息注入
+export async function environment(model: Provider.Model) {
+  const project = Instance.project
+  return [
+    [
+      `You are powered by the model named ${model.api.id}.`,
+      `Here is some useful information about the environment:`,
+      `&lt;env&gt;`,
+      `  Working directory: ${Instance.directory}`,
+      `  Is directory a git repo: ${project.vcs === "git" ? "yes" : "no"}`,
+      `  Platform: ${process.platform}`,
+      `  Today's date: ${new Date().toDateString()}`,
+      `&lt;/env&gt;`,
+    ].join("\n"),
+  ]
+}</code></pre>
+
+    <div class="box box-cyan">
+        <strong>为什么要注入环境信息？</strong><br>
+        LLM 不知道自己在哪台机器上、什么时间、什么目录。这些信息看似简单，但决定了 Agent 能否正确理解文件路径、
+        判断 Git 操作是否安全、以及理解"今天"是什么时候。
+    </div>
+</div>
+
+<!-- Section 5 -->
+<div class="section" id="s5">
+    <h2>五、Instruction 指令系统：AGENTS.md 发现与加载</h2>
+
+    <h3>5.1 扫描优先级</h3>
+    <p><code>InstructionPrompt.systemPaths()</code> 按以下优先级扫描指令文件：</p>
+
+    <div class="step">
+        <div class="num">1</div>
+        <div class="content">
+            <div class="title">项目级指令（最高优先级）</div>
+            <div class="desc">从 Instance.directory 向上搜索到 worktree，找到第一个匹配的指令文件</div>
+            <pre style="margin:8px 0"><code>const FILES = ["AGENTS.md", "CLAUDE.md", "CONTEXT.md"] // CONTEXT.md 已弃用</code></pre>
+        </div>
+    </div>
+    <div class="step green">
+        <div class="num">2</div>
+        <div class="content">
+            <div class="title">全局指令</div>
+            <div class="desc">检查 OPENCODE_CONFIG_DIR/AGENTS.md、~/.config/opencode/AGENTS.md、~/.claude/CLAUDE.md</div>
+        </div>
+    </div>
+    <div class="step purple">
+        <div class="num">3</div>
+        <div class="content">
+            <div class="title">config.instructions（用户配置）</div>
+            <div class="desc">支持文件路径（绝对/相对/~）和 HTTP(S) URL 两种形式</div>
+        </div>
+    </div>
+
+    <pre><code>// instruction.ts — 项目级指令发现
+export async function systemPaths() {
+  const paths = new Set()
+
+  // 1. 项目级：向上查找 AGENTS.md / CLAUDE.md / CONTEXT.md
+  for (const file of FILES) {
+    const matches = await Filesystem.findUp(file, Instance.directory, Instance.worktree)
+    if (matches.length > 0) {
+      matches.forEach((p) => paths.add(path.resolve(p)))
+      break  // 找到一组就停！不会同时加载 AGENTS.md 和 CLAUDE.md
+    }
+  }
+
+  // 2. 全局：~/.config/opencode/AGENTS.md 等
+  for (const file of globalFiles()) {
+    if (await Filesystem.exists(file)) {
+      paths.add(path.resolve(file))
+      break  // 同样只取第一个存在的
+    }
+  }
+
+  // 3. config.instructions 文件和 URL
+  if (config.instructions) { ... }
+
+  return paths
+}</code></pre>
+
+    <div class="box box-yellow">
+        <strong>关键设计：break 的语义。</strong>
+        <code>FILES = ["AGENTS.md", "CLAUDE.md", "CONTEXT.md"]</code> 按优先级排列。
+        找到 AGENTS.md 后直接 break，不会再查找 CLAUDE.md。这避免了同一项目加载多份冲突指令。
+    </div>
+</div>
+
+<!-- Section 6 -->
+<div class="section" id="s6">
+    <h2>六、子目录指令发现（resolve）</h2>
+    <p>当 Agent 通过 Read 工具读取文件时，系统会自动检查该文件所在目录及其父目录是否有指令文件：</p>
+
+    <pre><code>// instruction.ts — 子目录指令发现
+export async function resolve(messages, filepath, messageID) {
+  const system = await systemPaths()   // 已在 system prompt 中的
+  const already = loaded(messages)     // 已通过 Read 加载过的
+  const results = []
+
+  let current = path.dirname(filepath)
+  const root = path.resolve(Instance.directory)
+
+  // 从文件所在目录向上遍历到项目根
+  while (current.startsWith(root) && current !== root) {
+    const found = await find(current)  // 查找 AGENTS.md 等
+
+    if (found
+        && found !== target           // 不是正在读的文件本身
+        && !system.has(found)         // 不在 system prompt 中（避免重复）
+        && !already.has(found)        // 没有通过 Read 加载过
+        && !isClaimed(messageID, found)) {  // Claim 机制防重复
+      claim(messageID, found)
+      results.push({ filepath: found, content: "Instructions from: " + found + "\n" + ... })
+    }
+    current = path.dirname(current)
+  }
+  return results
+}</code></pre>
+
+    <div class="diagram-container" style="padding: 25px;">
+        <svg width="850" height="240" viewBox="0 0 850 240">
+            <text x="425" y="28" text-anchor="middle" fill="#1e293b" font-size="15" font-weight="bold">子目录指令发现：Read 文件时自动扫描父目录</text>
+            <g transform="translate(50,50)">
+                <!-- 目录树 -->
+                <rect x="0" y="0" width="120" height="30" rx="6" fill="#dbeafe" stroke="#93c5fd" stroke-width="1"/>
+                <text x="60" y="20" text-anchor="middle" fill="#1e40af" font-size="11">/project (root)</text>
+                <text x="60" y="46" text-anchor="middle" fill="#065f46" font-size="10">AGENTS.md ← system prompt 已包含</text>
+
+                <rect x="30" y="60" width="160" height="30" rx="6" fill="#f8fafc" stroke="#e2e8f0" stroke-width="1"/>
+                <text x="110" y="80" text-anchor="middle" fill="#1e293b" font-size="11">├─ src/</text>
+
+                <rect x="60" y="100" width="200" height="30" rx="6" fill="#fef3c7" stroke="#fbbf24" stroke-width="2"/>
+                <text x="160" y="120" text-anchor="middle" fill="#92400e" font-size="11">├─ components/ (有 AGENTS.md)</text>
+
+                <rect x="90" y="140" width="240" height="30" rx="6" fill="#d1fae5" stroke="#6ee7b7" stroke-width="2"/>
+                <text x="210" y="160" text-anchor="middle" fill="#065f46" font-size="11">└─ Button.tsx ← Agent 正在读这个文件</text>
+
+                <!-- 扫描路径 -->
+                <line x1="350" y1="155" x2="350" y2="55" stroke="#ef4444" stroke-width="2" stroke-dasharray="4"/>
+                <text x="370" y="150" fill="#ef4444" font-size="10">resolve 扫描路径 ↑</text>
+                <text x="370" y="125" fill="#ef4444" font-size="10">① components/AGENTS.md → 注入！</text>
+                <text x="370" y="105" fill="#64748b" font-size="10">② src/ → 无指令文件</text>
+                <text x="370" y="65" fill="#64748b" font-size="10">③ /project → 已在 system prompt，跳过</text>
+            </g>
+        </svg>
+    </div>
+
+    <div class="box box-green">
+        <strong>为什么需要子目录指令？</strong><br>
+        大型项目中，不同子目录可能有不同的编码规范。例如 <code>src/components/AGENTS.md</code> 可以定义 React 组件的编写规范，
+        而 <code>src/api/AGENTS.md</code> 定义 API 路由的编写规范。Agent 读取哪个目录的文件，就自动获得该目录的规范。
+    </div>
+</div>
+
+<!-- Section 7 -->
+<div class="section" id="s7">
+    <h2>七、Claim 机制：防止重复注入</h2>
+    <p>当同一个消息轮次中 Agent 读取多个文件时，子目录指令可能被多次发现。Claim 机制确保每个指令文件只注入一次：</p>
+
+    <pre><code>// instruction.ts — Claim 机制
+const state = Instance.state(() => {
+  return { claims: new Map() }  // messageID → Set<filepath>
+})
+
+function isClaimed(messageID, filepath) {
+  return state().claims.get(messageID)?.has(filepath) ?? false
+}
+
+function claim(messageID, filepath) {
+  let claimed = state().claims.get(messageID)
+  if (!claimed) {
+    claimed = new Set()
+    state().claims.set(messageID, claimed)
+  }
+  claimed.add(filepath)
+}
+
+// 每轮对话结束时清理
+export function clear(messageID) {
+  state().claims.delete(messageID)
+}</code></pre>
+
+    <div class="box box-blue">
+        <strong>Claim 的生命周期：</strong><br>
+        • <code>claim()</code> 在 resolve() 中调用，标记"此消息轮次已注入此指令文件"<br>
+        • <code>clear()</code> 在 loop() 的 <code>using _ = defer(() => clear(messageID))</code> 中调用<br>
+        • 一轮对话结束后自动清理，下一轮可以重新注入
+    </div>
+</div>
+
+<!-- Section 8 -->
+<div class="section" id="s8">
+    <h2>八、Config Instructions：用户自定义指令</h2>
+    <p>用户可以在 <code>opencode.json</code> 中配置额外的指令来源：</p>
+
+    <pre><code>// opencode.json
+{
+  "instructions": [
+    "./docs/coding-standards.md",       // 相对路径
+    "~/global-rules.md",                // Home 目录
+    "/absolute/path/rules.md",          // 绝对路径
+    "https://example.com/rules.txt"     // HTTP URL
+  ]
+}</code></pre>
+
+    <h3>8.1 文件路径解析</h3>
+    <pre><code>// instruction.ts — 文件路径解析
+for (let instruction of config.instructions) {
+  if (instruction.startsWith("https://")) continue  // URL 单独处理
+
+  if (instruction.startsWith("~/")) {
+    instruction = path.join(os.homedir(), instruction.slice(2))
+  }
+
+  // 绝对路径：直接 glob 扫描
+  // 相对路径：从项目目录向上查找
+  const matches = path.isAbsolute(instruction)
+    ? await Glob.scan(path.basename(instruction), { cwd: path.dirname(instruction) })
+    : await resolveRelative(instruction)  // Filesystem.globUp
+}</code></pre>
+
+    <h3>8.2 URL 远程加载</h3>
+    <pre><code>// instruction.ts — URL 远程指令
+const fetches = urls.map((url) =>
+  fetch(url, { signal: AbortSignal.timeout(5000) })  // 5秒超时
+    .then((res) => res.ok ? res.text() : "")
+    .catch(() => "")
+    .then((x) => x ? "Instructions from: " + url + "\n" + x : "")
+)</code></pre>
+
+    <div class="box box-yellow">
+        <strong>URL 指令的价值：</strong>团队可以将编码规范托管在统一的服务器上，所有开发者的 OpenCode 自动拉取最新版本。
+        5 秒超时确保不会因为网络问题阻塞 Agent 启动。
+    </div>
+</div>
+
+<!-- Section 9 -->
+<div class="section" id="s9">
+    <h2>九、Agent Prompt：每个 Agent 的个性化引导</h2>
+    <p>每个 Agent 可以有自己的 <code>prompt</code> 字段。当 Agent 有 prompt 时，它<strong>替代</strong> Provider Prompt 成为第一层：</p>
+
+    <table>
+        <tr><th>Agent</th><th>有 Prompt？</th><th>Prompt 内容</th><th>设计意图</th></tr>
+        <tr><td><strong>build</strong></td><td>无</td><td>使用 Provider Prompt（anthropic/beast/...）</td><td>通用执行，依赖模型默认人格</td></tr>
+        <tr><td><strong>explore</strong></td><td>✅</td><td>explore.txt — "文件搜索专家"，只读工具指南</td><td>覆盖模型人格，专注搜索</td></tr>
+        <tr><td><strong>plan</strong></td><td>无</td><td>使用 Provider Prompt + Plan Reminder</td><td>保持模型人格，通过 Reminder 约束行为</td></tr>
+        <tr><td><strong>compaction</strong></td><td>✅</td><td>compaction.txt — "对话摘要助手"</td><td>完全不同的角色定义</td></tr>
+        <tr><td><strong>title</strong></td><td>✅</td><td>title.txt — "标题生成器"</td><td>极简角色，只需生成标题</td></tr>
+        <tr><td><strong>summary</strong></td><td>✅</td><td>summary.txt — "变更总结器"</td><td>专注代码变更总结</td></tr>
+    </table>
+
+    <div class="box box-purple">
+        <strong>agent.prompt 覆盖 provider prompt 的逻辑：</strong><br>
+        <code>agent.prompt ? [agent.prompt] : SystemPrompt.provider(model)</code><br><br>
+        这是一个"全有或全无"的替代关系 —— Agent prompt 不是追加在 Provider prompt 后面，而是完全替代。
+        因此 Agent prompt 必须包含完整的角色定义和行为指南。
+    </div>
+</div>
+
+<!-- Section 10 -->
+<div class="section" id="s10">
+    <h2>十、Reminders：运行时上下文提醒</h2>
+    <p>Reminders 是在消息处理阶段动态注入的 <code>&lt;system-reminder&gt;</code> 标签，不属于 System Prompt，而是追加在用户消息末尾：</p>
+
+    <h3>10.1 Plan 模式提醒</h3>
+    <pre><code>// prompt.ts — insertReminders
+if (input.agent.name === "plan") {
+  userMessage.parts.push({
+    type: "text",
+    text: PROMPT_PLAN,  // plan.txt: "STRICTLY FORBIDDEN: ANY file edits"
+    synthetic: true,
+  })
+}</code></pre>
+
+    <h3>10.2 模式切换提醒</h3>
+    <pre><code>// 从 Plan 切换到 Build 时
+if (wasPlan && input.agent.name === "build") {
+  userMessage.parts.push({
+    type: "text",
+    text: BUILD_SWITCH,  // "Your operational mode has changed from plan to build"
+    synthetic: true,
+  })
+}</code></pre>
+
+    <h3>10.3 Max Steps 提醒</h3>
+    <pre><code>// 达到最大步数时，注入为 assistant 消息（不是 system reminder）
+messages: [
+  ...toModelMessages(msgs, model),
+  ...(isLastStep ? [{ role: "assistant", content: MAX_STEPS }] : []),
+]
+// MAX_STEPS = "CRITICAL - MAXIMUM STEPS REACHED... Do NOT make any tool calls"</code></pre>
+
+    <div class="box box-red">
+        <strong>为什么 Reminders 不是 System Prompt？</strong><br>
+        System Prompt 在 API 层面是固定的，部分模型对 System Prompt 中的"禁止"指令遵循度不够。
+        将 Plan 模式的严格约束放在用户消息中（作为 system-reminder 标签），可以提高模型的遵循度。
+    </div>
+</div>
+
+<!-- Section 11 -->
+<div class="section" id="s11">
+    <h2>十一、LLM.stream 最终组装</h2>
+    <p>所有 Guides 最终在 <code>LLM.stream()</code> 中完成组装。这是整个引导层的终点：</p>
+
+    <div class="diagram-container" style="padding: 25px;">
+        <svg width="850" height="400" viewBox="0 0 850 400">
+            <text x="425" y="28" text-anchor="middle" fill="#1e293b" font-size="15" font-weight="bold">LLM.stream() 中的完整组装流程</text>
+
+            <g transform="translate(50,50)">
+                <rect width="750" height="55" rx="10" fill="#dbeafe" stroke="#93c5fd" stroke-width="2"/>
+                <text x="16" y="22" fill="#1e40af" font-size="12" font-weight="bold">① System Prompt（header）</text>
+                <text x="16" y="42" fill="#1e293b" font-size="10">= agent.prompt || provider(model) + environment() + instructions() + user.system</text>
+            </g>
+
+            <g transform="translate(50,120)">
+                <rect width="750" height="55" rx="10" fill="#ede9fe" stroke="#a78bfa" stroke-width="2"/>
+                <text x="16" y="22" fill="#5b21b6" font-size="12" font-weight="bold">② Plugin Transform</text>
+                <text x="16" y="42" fill="#1e293b" font-size="10">Plugin.trigger("experimental.chat.system.transform") — 插件可修改 system 数组</text>
+            </g>
+
+            <g transform="translate(50,190)">
+                <rect width="750" height="55" rx="10" fill="#d1fae5" stroke="#6ee7b7" stroke-width="2"/>
+                <text x="16" y="22" fill="#065f46" font-size="12" font-weight="bold">③ 缓存优化</text>
+                <text x="16" y="42" fill="#1e293b" font-size="10">若 header 未被 Plugin 修改 → 拆分为 [header, rest] 两段，利用 LLM 的 prompt caching</text>
+            </g>
+
+            <g transform="translate(50,260)">
+                <rect width="750" height="55" rx="10" fill="#fef3c7" stroke="#fbbf24" stroke-width="2"/>
+                <text x="16" y="22" fill="#92400e" font-size="12" font-weight="bold">④ Codex 特殊路径</text>
+                <text x="16" y="42" fill="#1e293b" font-size="10">isCodex → options.instructions = SystemPrompt.instructions() — 通过 API options 传递而非 system</text>
+            </g>
+
+            <g transform="translate(50,330)">
+                <rect width="750" height="50" rx="10" fill="#fee2e2" stroke="#fca5a5" stroke-width="2"/>
+                <text x="16" y="22" fill="#991b1b" font-size="12" font-weight="bold">⑤ streamText() 调用</text>
+                <text x="16" y="42" fill="#1e293b" font-size="10">system + messages + tools + options → 发送给 LLM Provider</text>
+            </g>
+
+            <!-- 箭头 -->
+            <line x1="425" y1="105" x2="425" y2="120" stroke="#7c3aed" stroke-width="2"/>
+            <line x1="425" y1="175" x2="425" y2="190" stroke="#7c3aed" stroke-width="2"/>
+            <line x1="425" y1="245" x2="425" y2="260" stroke="#7c3aed" stroke-width="2"/>
+            <line x1="425" y1="315" x2="425" y2="330" stroke="#7c3aed" stroke-width="2"/>
+        </svg>
+    </div>
+
+    <pre><code>// llm.ts — 缓存优化逻辑
+const header = system[0]
+await Plugin.trigger("experimental.chat.system.transform", ..., { system })
+
+// 如果 header 未被插件修改，拆分为两段以利用 prompt caching
+if (system.length > 2 && system[0] === header) {
+  const rest = system.slice(1)
+  system.length = 0
+  system.push(header, rest.join("\n"))
+  // 现在 system = [不变的header, 动态的rest]
+  // LLM Provider 可以缓存 header 部分，减少重复计算
+}</code></pre>
+
+    <div class="box box-green">
+        <strong>Prompt Caching 优化：</strong>System Prompt 的第一段（Agent Prompt + Environment）在多轮对话中通常不变。
+        将其单独作为 system[0]，LLM Provider（如 Anthropic）可以缓存这部分的 KV-cache，
+        后续请求只需传输变化的部分，显著降低延迟和成本。
+    </div>
+</div>
+
+<!-- Section 12 -->
+<div class="section" id="s12">
+    <h2>十二、设计优势总结</h2>
+
+    <div class="adv-grid">
+        <div class="adv-card">
+            <div class="icon">🎭</div>
+            <h4>模型适配层</h4>
+            <p>Provider Prompt 为每个 LLM 家族定制人格，最大化各模型的指令遵循能力。Claude 走结构化路线，GPT 走自主 Agent 路线。</p>
+        </div>
+        <div class="adv-card">
+            <div class="icon">📂</div>
+            <h4>分层指令发现</h4>
+            <p>全局 → 项目 → 子目录，三级指令自动发现。大项目不同目录可以有不同规范，Agent 读取文件时自动获得相关规范。</p>
+        </div>
+        <div class="adv-card">
+            <div class="icon">🔒</div>
+            <h4>Claim 防重复</h4>
+            <p>每轮对话中，每个指令文件只注入一次。即使 Agent 读取同一目录的 10 个文件，子目录 AGENTS.md 也只出现一次。</p>
+        </div>
+        <div class="adv-card">
+            <div class="icon">⚡</div>
+            <h4>Prompt Caching</h4>
+            <p>System Prompt 拆分为 header + rest 两段。header 不变时可被 LLM Provider 缓存，降低后续请求的 token 消耗和延迟。</p>
+        </div>
+        <div class="adv-card">
+            <div class="icon">🌐</div>
+            <h4>远程指令支持</h4>
+            <p>config.instructions 支持 HTTP URL，团队可将编码规范托管在统一服务器。5 秒超时确保不会阻塞启动。</p>
+        </div>
+        <div class="adv-card">
+            <div class="icon">🔌</div>
+            <h4>Plugin 扩展点</h4>
+            <p>experimental.chat.system.transform 允许插件在发送前修改 System Prompt。如注入自定义 header、添加项目元数据等。</p>
+        </div>
+        <div class="adv-card">
+            <div class="icon">🧱</div>
+            <h4>Agent 覆盖机制</h4>
+            <p>agent.prompt 全量替代 provider prompt，让特殊用途 Agent（explore/compaction/title）拥有完全不同的角色定义。</p>
+        </div>
+        <div class="adv-card">
+            <div class="icon">📌</div>
+            <h4>运行时 Reminders</h4>
+            <p>Plan/Build 模式切换、Max Steps 限制等运行时状态通过 synthetic text part 注入，比 System Prompt 更灵活、遵循度更高。</p>
+        </div>
+        <div class="adv-card">
+            <div class="icon">🧹</div>
+            <h4>优雅降级</h4>
+            <p>URL 超时返回空串、文件不存在跳过、AGENTS.md 不存在不报错。任何指令源失败都不影响 Agent 正常运行。</p>
+        </div>
+    </div>
+
+    <div class="box box-green" style="margin-top:30px">
+        <strong>一句话总结：</strong>OpenCode 的 Guides 层是一个"静态声明 + 动态组装 + 运行时注入"的三层引导架构。<br>
+        它用 Provider Prompt 适配不同模型、用 AGENTS.md 体系管理项目规范、用 Agent Prompt 定义角色差异、
+        用 Reminders 处理运行时状态，最终在 LLM.stream() 中完成统一组装并利用 Prompt Caching 优化性能。<br>
+        整个设计让"告诉 Agent 该怎么做"这件事变得声明式、可组合、可扩展。
+    </div>
+</div>
+
+<div class="footer">
+    OpenCode Guides 层实现原理 — 基于 OpenCode 源码深度分析
+</div>
+
+</div>
+</body>
+</html>

@@ -1,0 +1,462 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OpenCode SSE事件总线与实时通信 - 深度技术分享</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#f8fafc;color:#1e293b;line-height:1.7}
+.hero{background:linear-gradient(135deg,#134e4a 0%,#0f766e 50%,#14b8a6 100%);color:white;padding:80px 0 60px;text-align:center}
+.hero h1{font-size:2.4em;margin-bottom:12px;font-weight:800}
+.hero p{font-size:1.15em;opacity:.85;max-width:700px;margin:0 auto}
+.hero .tag{display:inline-block;background:rgba(255,255,255,.15);padding:4px 14px;border-radius:20px;font-size:.85em;margin-top:16px}
+.container{max-width:960px;margin:0 auto;padding:0 24px}
+.toc{background:white;border-radius:12px;padding:28px 32px;margin:32px auto;box-shadow:0 1px 3px rgba(0,0,0,.08)}
+.toc h2{font-size:1.2em;margin-bottom:14px;color:#0f766e}
+.toc ol{padding-left:22px}.toc li{margin:6px 0}.toc a{color:#0f766e;text-decoration:none;font-size:.95em}.toc a:hover{text-decoration:underline}
+.section{margin:36px 0}.section h2{font-size:1.5em;font-weight:700;margin-bottom:16px;padding-bottom:8px;border-bottom:2px solid #e2e8f0}
+.section h3{font-size:1.15em;font-weight:600;margin:18px 0 10px;color:#334155}
+.card{background:white;border-radius:10px;padding:24px;margin:16px 0;box-shadow:0 1px 3px rgba(0,0,0,.06)}
+pre{background:#0f172a;color:#e2e8f0;border-radius:8px;padding:18px;overflow-x:auto;font-size:.88em;line-height:1.6;margin:12px 0}
+code{font-family:'JetBrains Mono','Fira Code',monospace}
+.inline-code{background:#e2e8f0;color:#1e293b;padding:2px 6px;border-radius:4px;font-size:.9em}
+table{width:100%;border-collapse:collapse;margin:14px 0;font-size:.92em}
+th{background:#0f766e;color:white;padding:10px 14px;text-align:left}
+td{padding:10px 14px;border-bottom:1px solid #e2e8f0}tr:nth-child(even){background:#f1f5f9}
+.tip{background:linear-gradient(135deg,#eff6ff,#dbeafe);border-left:4px solid #3b82f6;padding:16px 20px;border-radius:0 8px 8px 0;margin:14px 0}
+.warn{background:linear-gradient(135deg,#fefce8,#fef9c3);border-left:4px solid #eab308;padding:16px 20px;border-radius:0 8px 8px 0;margin:14px 0}
+.flow{display:flex;align-items:center;justify-content:center;gap:8px;flex-wrap:wrap;margin:20px 0;font-size:.92em}
+.flow .node{background:white;border:2px solid #0f766e;border-radius:8px;padding:8px 16px;font-weight:600}
+.flow .arrow{color:#0f766e;font-size:1.3em;font-weight:bold}
+.step{display:flex;gap:14px;align-items:flex-start;margin:12px 0}
+.step .num{background:#0f766e;color:white;min-width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:.9em;flex-shrink:0}
+.step .content{flex:1}
+svg{max-width:100%;margin:16px auto;display:block}
+</style>
+</head>
+<body>
+
+<div class="hero">
+<div class="container">
+<h1>OpenCode SSE 事件总线与实时通信</h1>
+<p>深入 Bus.publish → GlobalBus → SSE Stream → 前端 EventReducer 的完整实时链路</p>
+<div class="tag">Harness 深度技术分享 · 第 13 篇</div>
+</div>
+</div>
+
+<div class="container">
+
+<div class="toc">
+<h2>目录</h2>
+<ol>
+<li><a href="#ch1">事件驱动架构的必要性</a></li>
+<li><a href="#ch2">四层事件传播架构</a></li>
+<li><a href="#ch3">Bus — Instance 级发布/订阅</a></li>
+<li><a href="#ch4">BusEvent.define — 类型安全的事件定义</a></li>
+<li><a href="#ch5">GlobalBus — 跨 Instance 事件汇聚</a></li>
+<li><a href="#ch6">SSE 服务端 — Hono streamSSE</a></li>
+<li><a href="#ch7">SSE 客户端 — parseSSE 解析器</a></li>
+<li><a href="#ch8">事件类型全景图</a></li>
+<li><a href="#ch9">前端 EventReducer — 状态同步</a></li>
+<li><a href="#ch10">心跳与断线重连</a></li>
+<li><a href="#ch11">Database.effect — 事务后发布</a></li>
+<li><a href="#ch12">完整生命周期总结</a></li>
+</ol>
+</div>
+
+<!-- 第1章 -->
+<div class="section" id="ch1">
+<h2>一、事件驱动架构的必要性</h2>
+
+<p>OpenCode 是典型的 <strong>C/S 架构</strong>：后端（Node.js/Bun 进程）执行 AI 推理和工具调用，前端（Web/TUI/Desktop）展示结果。两端之间需要一个高效、低延迟的实时通信机制。</p>
+
+<div class="card">
+<h3>为什么选择 SSE 而非 WebSocket？</h3>
+<table>
+<tr><th>维度</th><th>SSE</th><th>WebSocket</th></tr>
+<tr><td>方向</td><td>单向（服务端→客户端）</td><td>双向</td></tr>
+<tr><td>复杂度</td><td>基于 HTTP，天然兼容代理/防火墙</td><td>独立协议，需要额外配置</td></tr>
+<tr><td>断线重连</td><td>浏览器原生支持 Last-Event-ID</td><td>需手动实现</td></tr>
+<tr><td>适合场景</td><td>事件推送（OpenCode 的核心需求）</td><td>双向实时交互</td></tr>
+</table>
+<p>OpenCode 的客户端→服务端通信走 REST API（POST /session/:id/chat），服务端→客户端走 SSE。职责清晰分离。</p>
+</div>
+</div>
+
+<!-- 第2章 -->
+<div class="section" id="ch2">
+<h2>二、四层事件传播架构</h2>
+
+<svg viewBox="0 0 800 340" xmlns="http://www.w3.org/2000/svg">
+<rect x="50" y="20" width="160" height="50" rx="8" fill="#0f766e"/>
+<text x="130" y="50" text-anchor="middle" fill="white" font-size="14" font-weight="bold">① Bus.publish()</text>
+<text x="130" y="86" text-anchor="middle" fill="#64748b" font-size="11">Instance 级事件源</text>
+
+<line x1="210" y1="45" x2="270" y2="45" stroke="#0f766e" stroke-width="2" marker-end="url(#a)"/>
+
+<rect x="270" y="20" width="160" height="50" rx="8" fill="#0891b2"/>
+<text x="350" y="50" text-anchor="middle" fill="white" font-size="14" font-weight="bold">② GlobalBus</text>
+<text x="350" y="86" text-anchor="middle" fill="#64748b" font-size="11">EventEmitter 汇聚</text>
+
+<line x1="430" y1="45" x2="490" y2="45" stroke="#0891b2" stroke-width="2" marker-end="url(#a)"/>
+
+<rect x="490" y="20" width="160" height="50" rx="8" fill="#7c3aed"/>
+<text x="570" y="50" text-anchor="middle" fill="white" font-size="14" font-weight="bold">③ SSE Stream</text>
+<text x="570" y="86" text-anchor="middle" fill="#64748b" font-size="11">HTTP text/event-stream</text>
+
+<line x1="570" y1="70" x2="570" y2="120" stroke="#7c3aed" stroke-width="2" marker-end="url(#a)"/>
+
+<rect x="420" y="120" width="300" height="50" rx="8" fill="#dc2626"/>
+<text x="570" y="150" text-anchor="middle" fill="white" font-size="14" font-weight="bold">④ EventReducer</text>
+<text x="570" y="186" text-anchor="middle" fill="#64748b" font-size="11">前端状态同步（SolidJS Store）</text>
+
+<!-- Detail boxes -->
+<rect x="50" y="220" width="700" height="100" rx="8" fill="white" stroke="#e2e8f0"/>
+<text x="70" y="245" fill="#334155" font-size="12" font-weight="bold">事件传播路径详解：</text>
+<text x="70" y="268" fill="#64748b" font-size="11">① 后端代码调用 Bus.publish(Event.Created, {info}) — 先通知本 Instance 订阅者</text>
+<text x="70" y="288" fill="#64748b" font-size="11">② 同时通过 GlobalBus.emit("event", {directory, payload}) 发送到全局 EventEmitter</text>
+<text x="70" y="308" fill="#64748b" font-size="11">③ SSE 路由监听 GlobalBus，将事件 JSON 序列化后写入 HTTP 响应流 → ④ 前端解析并更新 Store</text>
+</svg>
+</div>
+
+<!-- 第3章 -->
+<div class="section" id="ch3">
+<h2>三、Bus — Instance 级发布/订阅</h2>
+
+<pre><code>// packages/opencode/src/bus/index.ts
+export namespace Bus {
+    type Subscription = (event: any) => void
+
+    const state = Instance.state(() => {
+        const subscriptions = new Map&lt;any, Subscription[]>()
+        return { subscriptions }
+    })
+
+    export async function publish(def, properties) {
+        const payload = { type: def.type, properties }
+        // 通知本 type 的订阅者
+        for (const key of [def.type, "*"]) {
+            const match = state().subscriptions.get(key)
+            for (const sub of match ?? []) pending.push(sub(payload))
+        }
+        // 同时发送到全局 EventEmitter
+        GlobalBus.emit("event", { directory: Instance.directory, payload })
+        return Promise.all(pending)
+    }
+
+    export function subscribe(def, callback) {
+        return raw(def.type, callback)
+    }
+
+    export function subscribeAll(callback) {
+        return raw("*", callback)   // 通配符订阅所有事件
+    }
+
+    export function once(def, callback) {
+        const unsub = subscribe(def, (event) => {
+            if (callback(event)) unsub()
+        })
+    }
+}</code></pre>
+
+<div class="tip">
+<strong>两种订阅模式：</strong><span class="inline-code">subscribe(Event.Created, cb)</span> 精确订阅特定事件类型；<span class="inline-code">subscribeAll(cb)</span> 通配符订阅所有事件。Plugin 系统使用 subscribeAll 监听全局事件。
+</div>
+</div>
+
+<!-- 第4章 -->
+<div class="section" id="ch4">
+<h2>四、BusEvent.define — 类型安全的事件定义</h2>
+
+<pre><code>// packages/opencode/src/bus/bus-event.ts
+export namespace BusEvent {
+    const registry = new Map&lt;string, Definition>()
+
+    export function define(type, properties) {
+        const result = { type, properties }
+        registry.set(type, result)     // 注册到全局 registry
+        return result
+    }
+
+    // 基于 registry 自动生成 Zod discriminatedUnion 类型
+    export function payloads() {
+        return z.discriminatedUnion("type",
+            registry.entries().map(([type, def]) =>
+                z.object({
+                    type: z.literal(type),
+                    properties: def.properties,
+                })
+            ).toArray()
+        )
+    }
+}</code></pre>
+
+<div class="card">
+<h3>定义示例</h3>
+<pre><code>// 各模块定义自己的事件
+Session.Event.Created = BusEvent.define("session.created", z.object({ info: Info }))
+Session.Event.Updated = BusEvent.define("session.updated", z.object({ info: Info }))
+MessageV2.Event.Updated = BusEvent.define("message.updated", z.object({ info: MessageV2.Info }))
+MessageV2.Event.PartUpdated = BusEvent.define("part.updated", z.object({ part: MessageV2.Part }))
+Question.Event.Asked = BusEvent.define("question.asked", Question.Request)
+PermissionNext.Event.Asked = BusEvent.define("permission.asked", ...)
+MCP.ToolsChanged = BusEvent.define("mcp.tools.changed", z.object({ server: z.string() }))
+Event.Connected = BusEvent.define("server.connected", z.object({}))</code></pre>
+<p><span class="inline-code">payloads()</span> 方法将所有注册的事件自动生成 Zod discriminatedUnion，用于 OpenAPI schema 导出和 SSE 端点类型定义。</p>
+</div>
+</div>
+
+<!-- 第5章 -->
+<div class="section" id="ch5">
+<h2>五、GlobalBus — 跨 Instance 事件汇聚</h2>
+
+<pre><code>// packages/opencode/src/bus/global.ts — 极简实现
+import { EventEmitter } from "events"
+
+export const GlobalBus = new EventEmitter&lt;{
+    event: [{ directory?: string, payload: any }]
+}>()</code></pre>
+
+<p>GlobalBus 是一个 Node.js EventEmitter，它的唯一职责是<strong>跨项目汇聚事件</strong>。一个 OpenCode 服务可能同时管理多个项目（Instance），每个项目有自己的 Bus。GlobalBus 将所有 Instance 的事件统一到一个流中。</p>
+
+<div class="card">
+<h3>为什么需要两层 Bus？</h3>
+<p>一个 OpenCode 进程可以同时打开多个项目目录（workspace）。每个目录是一个独立的 Instance，有自己的 Session、Agent、Tool 状态。但前端 SSE 连接只有一个（<span class="inline-code">GET /global/event</span>），需要接收所有项目的事件。</p>
+<p>GlobalBus 就是这个汇聚点：每个 Instance 的 <span class="inline-code">Bus.publish</span> 同时向 GlobalBus 发事件，SSE 端点只需监听 GlobalBus。</p>
+</div>
+</div>
+
+<!-- 第6章 -->
+<div class="section" id="ch6">
+<h2>六、SSE 服务端 — Hono streamSSE</h2>
+
+<pre><code>// packages/opencode/src/server/routes/global.ts
+.get("/event", async (c) => {
+    c.header("X-Accel-Buffering", "no")      // 禁止 Nginx 缓冲
+    c.header("X-Content-Type-Options", "nosniff")
+    return streamSSE(c, async (stream) => {
+        // 连接成功时发送初始事件
+        stream.writeSSE({
+            data: JSON.stringify({
+                payload: { type: "server.connected", properties: {} },
+            }),
+        })
+
+        // 监听 GlobalBus
+        async function handler(event: any) {
+            await stream.writeSSE({ data: JSON.stringify(event) })
+        }
+        GlobalBus.on("event", handler)
+
+        // 10 秒心跳，防止代理超时
+        const heartbeat = setInterval(() => {
+            stream.writeSSE({
+                data: JSON.stringify({
+                    payload: { type: "server.heartbeat", properties: {} },
+                }),
+            })
+        }, 10_000)
+
+        await new Promise((resolve) => {
+            stream.onAbort(() => {
+                clearInterval(heartbeat)
+                GlobalBus.off("event", handler)
+                resolve()
+            })
+        })
+    })
+})</code></pre>
+
+<div class="warn">
+<strong>关键细节：</strong>
+<ul style="margin:8px 0 0 16px">
+<li><span class="inline-code">X-Accel-Buffering: no</span> — 防止 Nginx 等反向代理缓冲 SSE 数据，确保事件实时到达</li>
+<li><span class="inline-code">heartbeat</span> — 每 10 秒发送心跳，防止空闲连接被代理/防火墙断开</li>
+<li><span class="inline-code">stream.onAbort</span> — 客户端断开时自动清理监听器，防止内存泄漏</li>
+</ul>
+</div>
+</div>
+
+<!-- 第7章 -->
+<div class="section" id="ch7">
+<h2>七、SSE 客户端 — parseSSE 解析器</h2>
+
+<pre><code>// packages/opencode/src/control-plane/sse.ts
+export async function parseSSE(body, signal, onEvent) {
+    const reader = body.getReader()
+    const decoder = new TextDecoder()
+    let buf = ""
+    let last = ""
+    let retry = 1000
+
+    while (!signal.aborted) {
+        const chunk = await reader.read()
+        if (chunk.done) break
+        buf += decoder.decode(chunk.value, { stream: true })
+
+        // 统一换行符
+        buf = buf.replace(/\r\n/g, "\n").replace(/\r/g, "\n")
+
+        // SSE 协议：双换行分隔事件
+        const chunks = buf.split("\n\n")
+        buf = chunks.pop() ?? ""   // 最后一块可能不完整，保留
+
+        chunks.forEach((chunk) => {
+            const data: string[] = []
+            chunk.split("\n").forEach((line) => {
+                if (line.startsWith("data:"))
+                    data.push(line.replace(/^data:\s*/, ""))
+                if (line.startsWith("id:"))
+                    last = line.replace(/^id:\s*/, "")
+                if (line.startsWith("retry:"))
+                    retry = parseInt(line.replace(/^retry:\s*/, ""))
+            })
+            if (data.length) {
+                const raw = data.join("\n")
+                try { onEvent(JSON.parse(raw)) }
+                catch { onEvent({ type: "sse.message", properties: { data: raw, id: last } }) }
+            }
+        })
+    }
+}</code></pre>
+</div>
+
+<!-- 第8章 -->
+<div class="section" id="ch8">
+<h2>八、事件类型全景图</h2>
+
+<table>
+<tr><th>事件类型</th><th>触发时机</th><th>核心数据</th></tr>
+<tr><td>session.created</td><td>Session.create()</td><td>info: Session.Info</td></tr>
+<tr><td>session.updated</td><td>任何 Session 属性变更</td><td>info: Session.Info</td></tr>
+<tr><td>session.deleted</td><td>Session.remove()</td><td>info: Session.Info</td></tr>
+<tr><td>session.diff</td><td>文件变更计算完成</td><td>sessionID, diff: FileDiff[]</td></tr>
+<tr><td>session.error</td><td>LLM 调用或工具执行错误</td><td>sessionID, error</td></tr>
+<tr><td>message.updated</td><td>消息创建/更新</td><td>info: MessageV2.Info</td></tr>
+<tr><td>message.removed</td><td>消息删除</td><td>sessionID, messageID</td></tr>
+<tr><td>part.updated</td><td>Part 创建/更新（text、tool、reasoning...）</td><td>part: MessageV2.Part</td></tr>
+<tr><td>part.delta</td><td>Part 增量更新（流式文本/推理）</td><td>sessionID, messageID, partID, field, delta</td></tr>
+<tr><td>part.removed</td><td>Part 删除</td><td>sessionID, messageID, partID</td></tr>
+<tr><td>question.asked</td><td>Question.ask()</td><td>Question.Request</td></tr>
+<tr><td>question.replied</td><td>Question.reply()</td><td>sessionID, requestID, answers</td></tr>
+<tr><td>question.rejected</td><td>Question.reject()</td><td>sessionID, requestID</td></tr>
+<tr><td>permission.asked</td><td>PermissionNext.ask()</td><td>权限请求详情</td></tr>
+<tr><td>permission.replied</td><td>用户批准/拒绝权限</td><td>sessionID, requestID</td></tr>
+<tr><td>mcp.tools.changed</td><td>MCP 服务工具列表变更</td><td>server: string</td></tr>
+<tr><td>server.connected</td><td>SSE 连接建立</td><td>空</td></tr>
+<tr><td>server.heartbeat</td><td>每 10 秒心跳</td><td>空</td></tr>
+</table>
+</div>
+
+<!-- 第9章 -->
+<div class="section" id="ch9">
+<h2>九、前端 EventReducer — 状态同步</h2>
+
+<p>前端通过 <span class="inline-code">EventReducer</span> 将 SSE 事件映射为 SolidJS Store 的状态更新：</p>
+
+<div class="card">
+<h3>事件处理模式</h3>
+<pre><code>// packages/app/src/context/global-sync/event-reducer.ts
+// 简化示例
+function reduce(state, event) {
+    switch (event.payload.type) {
+        case "session.created":
+            state.sessions[event.payload.properties.info.id] = event.payload.properties.info
+            break
+        case "message.updated":
+            // 更新消息列表
+            break
+        case "part.updated":
+            // 更新消息 parts
+            const part = event.payload.properties.part
+            state.parts[part.messageID] = [...existing, part]
+            break
+        case "part.delta":
+            // 增量更新文本（流式渲染）
+            const { partID, field, delta } = event.payload.properties
+            state.parts[msgID].find(p => p.id === partID)[field] += delta
+            break
+        case "question.asked":
+            // 展示问题 UI
+            state.pendingQuestions[requestID] = event.payload.properties
+            break
+    }
+}</code></pre>
+<p><span class="inline-code">part.delta</span> 是最高频的事件 — AI 每生成一个 token 就触发一次，前端据此实现逐字打字效果。</p>
+</div>
+</div>
+
+<!-- 第10章 -->
+<div class="section" id="ch10">
+<h2>十、心跳与断线重连</h2>
+
+<div class="card">
+<h3>服务端心跳</h3>
+<p>每 10 秒发送 <span class="inline-code">server.heartbeat</span> 事件，防止空闲连接被 Nginx/CDN/防火墙断开。这是 SSE 在生产环境中的标准实践。</p>
+</div>
+
+<div class="card">
+<h3>客户端重连</h3>
+<pre><code>// control-plane/workspace.ts 中的 SSE 重连
+await parseSSE(res.body, stop, (event) => {
+    // 处理事件...
+})
+// SSE 连接断开后
+// Wait 250ms and retry if SSE connection fails
+await new Promise(r => setTimeout(r, 250))
+// 重新建立连接...</code></pre>
+<p>客户端在连接断开后等待 250ms 重试，采用指数退避策略避免重连风暴。由于 SSE 协议的特性，重连后会从最后接收的事件 ID 继续，不会丢失事件。</p>
+</div>
+</div>
+
+<!-- 第11章 -->
+<div class="section" id="ch11">
+<h2>十一、Database.effect — 事务后发布</h2>
+
+<p>一个精巧的设计：事件发布必须等待数据库事务提交后才执行，防止前端收到事件后查询到旧数据。</p>
+
+<pre><code>// Database.use 中的 effect 机制
+Database.use((db) => {
+    // 1. 执行数据库写入
+    db.insert(SessionTable).values(toRow(result)).run()
+
+    // 2. 注册事务后回调（不会立即执行）
+    Database.effect(() =>
+        Bus.publish(Event.Created, { info: result })
+    )
+    // 3. 事务提交后，effect 回调才执行 → 事件才发出
+})</code></pre>
+
+<div class="tip">
+<strong>为什么这很重要？</strong>如果事件在事务提交前发出，前端收到事件后立即请求 Session 详情，可能拿到的是事务前的旧数据（或找不到）。Database.effect 确保"事件到达时，数据已经持久化"。
+</div>
+</div>
+
+<!-- 第12章 -->
+<div class="section" id="ch12">
+<h2>十二、完整生命周期总结</h2>
+
+<div class="card">
+<h3>SSE 事件总线核心规律</h3>
+<table>
+<tr><th>规律</th><th>体现</th></tr>
+<tr><td><strong>类型安全</strong></td><td>BusEvent.define 用 Zod schema 定义事件结构，编译期校验</td></tr>
+<tr><td><strong>两层架构</strong></td><td>Instance Bus（本地订阅） + GlobalBus（跨 Instance 汇聚）</td></tr>
+<tr><td><strong>事务一致性</strong></td><td>Database.effect 确保事件在数据持久化后才发出</td></tr>
+<tr><td><strong>增量更新</strong></td><td>part.delta 实现逐字流式渲染，避免每次传输完整内容</td></tr>
+<tr><td><strong>连接保活</strong></td><td>10 秒心跳 + X-Accel-Buffering 头，穿透代理和防火墙</td></tr>
+<tr><td><strong>资源清理</strong></td><td>stream.onAbort 清理监听器，Instance dispose 发出 InstanceDisposed 事件</td></tr>
+<tr><td><strong>自动 Schema</strong></td><td>BusEvent.payloads() 从 registry 自动生成 OpenAPI discriminatedUnion</td></tr>
+</table>
+</div>
+
+<div class="tip">
+<strong>下一篇预告：</strong>Provider 多模型架构 — 20+ Provider 适配器、模型发现、Custom Loader、流式转换的统一抽象。
+</div>
+</div>
+
+</div>
+</body>
+</html>

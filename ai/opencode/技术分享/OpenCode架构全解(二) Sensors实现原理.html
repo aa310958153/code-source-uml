@@ -1,0 +1,958 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OpenCode Sensors 实现原理 — Agent 的"神经系统"</title>
+    <style>
+        :root { --primary: #2563eb; --secondary: #7c3aed; --success: #10b981; --warning: #f59e0b; --danger: #ef4444; --info: #06b6d4; --bg: #f8fafc; --card: #fff; --text: #1e293b; --muted: #64748b; --border: #e2e8f0; --code-bg: #0f172a; }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Noto Sans SC', sans-serif; line-height: 1.8; color: var(--text); background: var(--bg); }
+        .container { max-width: 1100px; margin: 0 auto; padding: 20px; }
+        .hero { background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 50%, #312e81 100%); color: white; padding: 60px 30px; text-align: center; border-radius: 24px; margin-bottom: 30px; position: relative; overflow: hidden; }
+        .hero::before { content: ''; position: absolute; top: -50%; left: -50%; width: 200%; height: 200%; background: radial-gradient(circle, rgba(239,68,68,0.08) 0%, transparent 70%); }
+        .hero h1 { font-size: 2.4em; margin-bottom: 15px; position: relative; }
+        .hero .subtitle { color: #fca5a5; font-size: 1.15em; max-width: 800px; margin: 0 auto 20px; position: relative; }
+        .hero .tags { display: flex; justify-content: center; gap: 12px; flex-wrap: wrap; position: relative; }
+        .hero .tag { background: rgba(255,255,255,0.12); padding: 6px 16px; border-radius: 20px; font-size: 0.9em; border: 1px solid rgba(255,255,255,0.2); }
+        .toc { background: var(--card); border: 2px solid var(--border); border-radius: 16px; padding: 24px; margin-bottom: 28px; }
+        .toc h3 { color: var(--primary); margin-bottom: 12px; font-size: 1.15em; }
+        .toc ol { columns: 2; column-gap: 30px; padding-left: 22px; }
+        .toc li { margin: 6px 0; }
+        .toc a { color: var(--text); text-decoration: none; }
+        .toc a:hover { color: var(--primary); text-decoration: underline; }
+        .section { background: var(--card); border-radius: 18px; padding: 32px; margin-bottom: 28px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.07); }
+        .section h2 { color: var(--primary); font-size: 1.5em; margin-bottom: 20px; padding-bottom: 12px; border-bottom: 3px solid var(--primary); }
+        .section h3 { color: var(--secondary); font-size: 1.2em; margin: 24px 0 12px 0; }
+        .section h4 { color: var(--text); font-size: 1.05em; margin: 18px 0 8px 0; }
+        pre { background: var(--code-bg); color: #e2e8f0; padding: 20px; border-radius: 12px; overflow-x: auto; margin: 16px 0; font-family: 'JetBrains Mono', 'Fira Code', monospace; font-size: 0.88em; line-height: 1.7; }
+        code { background: #e2e8f0; padding: 2px 7px; border-radius: 4px; font-family: 'JetBrains Mono', 'Fira Code', monospace; font-size: 0.88em; }
+        pre code { background: transparent; padding: 0; }
+        .box { padding: 18px 22px; border-radius: 0 12px 12px 0; margin: 18px 0; font-size: 0.98em; line-height: 1.9; }
+        .box-blue { background: linear-gradient(135deg, #dbeafe, #bfdbfe); border-left: 4px solid var(--primary); }
+        .box-green { background: linear-gradient(135deg, #d1fae5, #a7f3d0); border-left: 4px solid var(--success); }
+        .box-purple { background: linear-gradient(135deg, #ede9fe, #ddd6fe); border-left: 4px solid var(--secondary); }
+        .box-yellow { background: linear-gradient(135deg, #fef3c7, #fde68a); border-left: 4px solid var(--warning); }
+        .box-red { background: linear-gradient(135deg, #fee2e2, #fecaca); border-left: 4px solid var(--danger); }
+        .box-cyan { background: linear-gradient(135deg, #cffafe, #a5f3fc); border-left: 4px solid var(--info); }
+        table { width: 100%; border-collapse: collapse; margin: 16px 0; border-radius: 12px; overflow: hidden; box-shadow: 0 2px 4px rgba(0,0,0,0.06); }
+        th { background: var(--primary); color: white; padding: 14px 16px; text-align: left; font-weight: 600; font-size: 0.95em; }
+        td { padding: 12px 16px; border-bottom: 1px solid var(--border); font-size: 0.95em; }
+        tr:nth-child(even) { background: #f8fafc; }
+        tr:hover { background: #f1f5f9; }
+        .diagram-container { background: white; border: 2px solid var(--border); border-radius: 16px; margin: 20px 0; overflow-x: auto; }
+        .step { display: flex; gap: 16px; margin: 16px 0; padding: 20px; background: linear-gradient(135deg, #f8fafc, #f1f5f9); border-radius: 14px; border-left: 5px solid var(--primary); }
+        .step.green { border-left-color: var(--success); }
+        .step.purple { border-left-color: var(--secondary); }
+        .step.yellow { border-left-color: var(--warning); }
+        .step.red { border-left-color: var(--danger); }
+        .step .num { min-width: 40px; height: 40px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 1.1em; color: white; background: var(--primary); flex-shrink: 0; }
+        .step.green .num { background: var(--success); }
+        .step.purple .num { background: var(--secondary); }
+        .step.yellow .num { background: var(--warning); }
+        .step.red .num { background: var(--danger); }
+        .step .content { flex: 1; }
+        .step .title { font-weight: 700; font-size: 1.05em; margin-bottom: 6px; }
+        .step .file { font-family: 'JetBrains Mono', monospace; font-size: 0.82em; color: var(--secondary); background: #ede9fe; padding: 3px 10px; border-radius: 4px; display: inline-block; margin: 4px 0; }
+        .step .desc { color: var(--muted); margin-top: 8px; }
+        .sensor-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; margin: 20px 0; }
+        .sensor-card { background: white; border: 2px solid var(--border); border-radius: 14px; padding: 20px; transition: transform 0.2s, box-shadow 0.2s; }
+        .sensor-card:hover { transform: translateY(-2px); box-shadow: 0 8px 16px rgba(0,0,0,0.1); }
+        .sensor-card .icon { font-size: 2em; margin-bottom: 10px; }
+        .sensor-card h4 { margin-bottom: 8px; font-size: 1.05em; }
+        .sensor-card p { color: var(--muted); font-size: 0.95em; }
+        .sensor-card .trigger { font-size: 0.85em; color: var(--danger); font-weight: 600; margin-top: 8px; }
+        .footer { text-align: center; padding: 30px; color: var(--muted); border-top: 1px solid var(--border); margin-top: 30px; }
+        ul, ol { margin: 10px 0; padding-left: 22px; }
+        li { margin: 6px 0; }
+    </style>
+</head>
+<body>
+<div class="container">
+
+    <!-- Hero -->
+    <div class="hero">
+        <h1>OpenCode Sensors 实现原理</h1>
+        <p class="subtitle">
+            Agent 的"神经系统" — 每一次工具调用前后，Sensors 都在默默工作：<br>
+            校验输入、截断输出、检测死循环、拦截危险命令、自动重试、追踪变更、快照回滚
+        </p>
+        <div class="tags">
+            <span class="tag">Zod 输入校验</span>
+            <span class="tag">输出截断</span>
+            <span class="tag">Doom Loop 检测</span>
+            <span class="tag">Permission 权限</span>
+            <span class="tag">Bash AST 安全</span>
+            <span class="tag">重试退避</span>
+            <span class="tag">快照回滚</span>
+        </div>
+    </div>
+
+    <!-- TOC -->
+    <div class="toc">
+        <h3>目录</h3>
+        <ol>
+            <li><a href="#s1">Sensors 总览：Agent 的"神经系统"</a></li>
+            <li><a href="#s2">Sensor 1：Zod Schema — 输入校验（调用前）</a></li>
+            <li><a href="#s3">Sensor 2：Output Truncation — 输出截断（调用后）</a></li>
+            <li><a href="#s4">Sensor 3：Doom Loop Detection — 死循环检测（调用时）</a></li>
+            <li><a href="#s5">Sensor 4：Permission System — 权限守卫（调用前）</a></li>
+            <li><a href="#s6">Sensor 5：Bash AST Security — 命令安全解析</a></li>
+            <li><a href="#s7">Sensor 6：Retry with Backoff — 自动重试</a></li>
+            <li><a href="#s8">Sensor 7：Snapshot & Revert — 变更追踪与回滚</a></li>
+            <li><a href="#s9">Sensor 8：Error Classification — 错误分类</a></li>
+            <li><a href="#s10">八大 Sensors 的完整协作流程</a></li>
+            <li><a href="#s11">设计优势分析</a></li>
+        </ol>
+    </div>
+
+    <!-- Section 1: 总览 -->
+    <div class="section" id="s1">
+        <h2>一、Sensors 总览：Agent 的"神经系统"</h2>
+
+        <div class="box box-blue">
+            <strong>用人体隐喻理解 Sensors：</strong><br><br>
+            如果 LLM 是 Agent 的"大脑"，工具是"眼睛"和"双手"，那 Sensors 就是<strong>神经系统</strong>——<br>
+            &bull; 大脑说"伸手拿东西" → <strong>神经检查</strong>：手能伸那么远吗？拿的东西安全吗？<br>
+            &bull; 眼睛看到东西 → <strong>神经传递</strong>：信息量太大？截断一点再传给大脑<br>
+            &bull; 手在重复同一个动作 → <strong>神经警告</strong>：你在死循环了，停下来想想<br>
+            &bull; 手要碰危险物品 → <strong>神经拦截</strong>：等等，先问问主人
+        </div>
+
+        <div class="diagram-container" style="padding: 25px;">
+            <svg width="820" height="450" viewBox="0 0 820 450">
+                <text x="410" y="25" text-anchor="middle" font-weight="700" font-size="16" fill="#1e293b">Sensors 在工具调用生命周期中的介入点</text>
+
+                <!-- Timeline -->
+                <line x1="60" y1="70" x2="760" y2="70" stroke="#e2e8f0" stroke-width="3"/>
+                <text x="130" y="55" text-anchor="middle" font-size="11" fill="#64748b" font-weight="600">LLM 决定调用工具</text>
+                <text x="410" y="55" text-anchor="middle" font-size="11" fill="#64748b" font-weight="600">工具执行中</text>
+                <text x="650" y="55" text-anchor="middle" font-size="11" fill="#64748b" font-weight="600">执行完成</text>
+
+                <!-- Pre-execution sensors -->
+                <g transform="translate(30, 90)">
+                    <rect width="240" height="340" rx="14" fill="#fee2e2" stroke="#fca5a5" stroke-width="2"/>
+                    <text x="120" y="28" text-anchor="middle" font-weight="700" font-size="14" fill="#991b1b">调用前（Pre-flight）</text>
+
+                    <g transform="translate(15, 45)">
+                        <rect width="210" height="50" rx="8" fill="#ef4444"/>
+                        <text x="105" y="20" text-anchor="middle" font-size="11" fill="white" font-weight="600">Sensor 1: Zod Schema</text>
+                        <text x="105" y="38" text-anchor="middle" font-size="9" fill="white" opacity="0.8">校验 LLM 传入的参数</text>
+                    </g>
+
+                    <g transform="translate(15, 105)">
+                        <rect width="210" height="50" rx="8" fill="#ef4444"/>
+                        <text x="105" y="20" text-anchor="middle" font-size="11" fill="white" font-weight="600">Sensor 4: Permission</text>
+                        <text x="105" y="38" text-anchor="middle" font-size="9" fill="white" opacity="0.8">allow / deny / ask</text>
+                    </g>
+
+                    <g transform="translate(15, 165)">
+                        <rect width="210" height="50" rx="8" fill="#ef4444"/>
+                        <text x="105" y="20" text-anchor="middle" font-size="11" fill="white" font-weight="600">Sensor 5: Bash AST</text>
+                        <text x="105" y="38" text-anchor="middle" font-size="9" fill="white" opacity="0.8">解析命令 + 路径检查</text>
+                    </g>
+
+                    <g transform="translate(15, 225)">
+                        <rect width="210" height="50" rx="8" fill="#ef4444"/>
+                        <text x="105" y="20" text-anchor="middle" font-size="11" fill="white" font-weight="600">Sensor 3: Doom Loop</text>
+                        <text x="105" y="38" text-anchor="middle" font-size="9" fill="white" opacity="0.8">检测连续3次相同调用</text>
+                    </g>
+
+                    <g transform="translate(15, 285)">
+                        <rect width="210" height="35" rx="8" fill="#fca5a5"/>
+                        <text x="105" y="23" text-anchor="middle" font-size="10" fill="#991b1b" font-weight="600">不通过 → 抛异常，不调用工具</text>
+                    </g>
+                </g>
+
+                <!-- During execution -->
+                <g transform="translate(290, 90)">
+                    <rect width="240" height="340" rx="14" fill="#fef3c7" stroke="#fbbf24" stroke-width="2"/>
+                    <text x="120" y="28" text-anchor="middle" font-weight="700" font-size="14" fill="#92400e">执行中（Runtime）</text>
+
+                    <g transform="translate(15, 50)">
+                        <rect width="210" height="50" rx="8" fill="#f59e0b"/>
+                        <text x="105" y="20" text-anchor="middle" font-size="11" fill="white" font-weight="600">Sensor 7: Snapshot</text>
+                        <text x="105" y="38" text-anchor="middle" font-size="9" fill="white" opacity="0.8">记录文件状态（用于回滚）</text>
+                    </g>
+
+                    <g transform="translate(15, 110)">
+                        <rect width="210" height="50" rx="8" fill="#f59e0b"/>
+                        <text x="105" y="20" text-anchor="middle" font-size="11" fill="white" font-weight="600">Sensor 6: Retry</text>
+                        <text x="105" y="38" text-anchor="middle" font-size="9" fill="white" opacity="0.8">API 错误 → 指数退避重试</text>
+                    </g>
+
+                    <g transform="translate(15, 170)">
+                        <rect width="210" height="50" rx="8" fill="#f59e0b"/>
+                        <text x="105" y="20" text-anchor="middle" font-size="11" fill="white" font-weight="600">Bash: Timeout</text>
+                        <text x="105" y="38" text-anchor="middle" font-size="9" fill="white" opacity="0.8">默认2分钟超时 → kill</text>
+                    </g>
+
+                    <g transform="translate(15, 230)">
+                        <rect width="210" height="50" rx="8" fill="#f59e0b"/>
+                        <text x="105" y="20" text-anchor="middle" font-size="11" fill="white" font-weight="600">Bash: Metadata</text>
+                        <text x="105" y="38" text-anchor="middle" font-size="9" fill="white" opacity="0.8">实时输出上限 30K 字符</text>
+                    </g>
+
+                    <g transform="translate(15, 290)">
+                        <rect width="210" height="35" rx="8" fill="#fde68a"/>
+                        <text x="105" y="23" text-anchor="middle" font-size="10" fill="#92400e" font-weight="600">持续监控，异常自动恢复</text>
+                    </g>
+                </g>
+
+                <!-- Post-execution -->
+                <g transform="translate(550, 90)">
+                    <rect width="240" height="340" rx="14" fill="#d1fae5" stroke="#6ee7b7" stroke-width="2"/>
+                    <text x="120" y="28" text-anchor="middle" font-weight="700" font-size="14" fill="#065f46">执行后（Post-flight）</text>
+
+                    <g transform="translate(15, 50)">
+                        <rect width="210" height="50" rx="8" fill="#10b981"/>
+                        <text x="105" y="20" text-anchor="middle" font-size="11" fill="white" font-weight="600">Sensor 2: Truncation</text>
+                        <text x="105" y="38" text-anchor="middle" font-size="9" fill="white" opacity="0.8">2000行/50KB 硬限制</text>
+                    </g>
+
+                    <g transform="translate(15, 110)">
+                        <rect width="210" height="50" rx="8" fill="#10b981"/>
+                        <text x="105" y="20" text-anchor="middle" font-size="11" fill="white" font-weight="600">Sensor 7: Patch Diff</text>
+                        <text x="105" y="38" text-anchor="middle" font-size="9" fill="white" opacity="0.8">对比快照 → 记录变更文件</text>
+                    </g>
+
+                    <g transform="translate(15, 170)">
+                        <rect width="210" height="50" rx="8" fill="#10b981"/>
+                        <text x="105" y="20" text-anchor="middle" font-size="11" fill="white" font-weight="600">Sensor 8: Error Class</text>
+                        <text x="105" y="38" text-anchor="middle" font-size="9" fill="white" opacity="0.8">分类错误 → 决定处理方式</text>
+                    </g>
+
+                    <g transform="translate(15, 230)">
+                        <rect width="210" height="50" rx="8" fill="#10b981"/>
+                        <text x="105" y="20" text-anchor="middle" font-size="11" fill="white" font-weight="600">isOverflow Check</text>
+                        <text x="105" y="38" text-anchor="middle" font-size="9" fill="white" opacity="0.8">token 超限 → 触发 Compaction</text>
+                    </g>
+
+                    <g transform="translate(15, 290)">
+                        <rect width="210" height="35" rx="8" fill="#a7f3d0"/>
+                        <text x="105" y="23" text-anchor="middle" font-size="10" fill="#065f46" font-weight="600">处理结果 → 安全传给 LLM</text>
+                    </g>
+                </g>
+            </svg>
+        </div>
+
+        <table>
+            <tr><th>Sensor</th><th>核心文件</th><th>介入时机</th><th>触发条件</th><th>失败动作</th></tr>
+            <tr><td><strong>Zod Schema</strong></td><td><code>tool/tool.ts</code></td><td>工具调用前</td><td>每次工具调用</td><td>抛异常，LLM 看到错误并重试</td></tr>
+            <tr><td><strong>Truncation</strong></td><td><code>tool/truncation.ts</code></td><td>工具调用后</td><td>输出 > 2000行/50KB</td><td>截断 + 保存完整文件</td></tr>
+            <tr><td><strong>Doom Loop</strong></td><td><code>session/processor.ts</code></td><td>工具调用时</td><td>连续3次相同调用</td><td>权限询问用户</td></tr>
+            <tr><td><strong>Permission</strong></td><td><code>permission/next.ts</code></td><td>工具调用前</td><td>每次工具调用</td><td>deny→抛错 / ask→等用户</td></tr>
+            <tr><td><strong>Bash AST</strong></td><td><code>tool/bash.ts</code></td><td>Bash 执行前</td><td>每条 Bash 命令</td><td>外部目录→权限请求</td></tr>
+            <tr><td><strong>Retry</strong></td><td><code>session/retry.ts</code></td><td>LLM API 错误时</td><td>可重试的 API 错误</td><td>指数退避 → 重试</td></tr>
+            <tr><td><strong>Snapshot</strong></td><td><code>snapshot/index.ts</code></td><td>每步开始/结束</td><td>每个 step</td><td>记录文件树 hash → 可回滚</td></tr>
+            <tr><td><strong>Error Class</strong></td><td><code>message-v2.ts</code></td><td>任何错误发生时</td><td>异常/错误</td><td>分类后决定重试/停止/压缩</td></tr>
+        </table>
+    </div>
+
+    <!-- Section 2: Zod Schema -->
+    <div class="section" id="s2">
+        <h2>二、Sensor 1：Zod Schema — 输入校验</h2>
+
+        <p>LLM 不是程序员，它生成的工具调用参数可能不合法（缺少字段、类型错误、路径不存在）。Zod Schema 是第一道防线。</p>
+
+        <h3>2.1 实现机制</h3>
+<pre>
+<span style="color:#94a3b8;">// tool/tool.ts:58-69 — 工具定义的 execute 被包装</span>
+
+toolInfo.execute = async (args, ctx) => {
+    <span style="color:#fbbf24;">try {</span>
+        <span style="color:#fbbf24;">toolInfo.parameters.parse(args)</span>    <span style="color:#94a3b8;">// ← Zod 校验！</span>
+    <span style="color:#fbbf24;">} catch (error) {</span>
+        if (error instanceof z.ZodError && toolInfo.formatValidationError) {
+            <span style="color:#94a3b8;">// 工具可以提供自定义错误格式</span>
+            throw new Error(toolInfo.formatValidationError(error), {cause: error})
+        }
+        throw new Error(
+            <span style="color:#34d399;">`The ${id} tool was called with invalid arguments: ${error}.\n</span>
+<span style="color:#34d399;">             Please rewrite the input so it satisfies the expected schema.`</span>,
+            {cause: error},
+        )
+    }
+    const result = await execute(args, ctx)
+    <span style="color:#94a3b8;">// ...truncation 处理...</span>
+}
+</pre>
+
+        <div class="box box-green">
+            <strong>设计精妙点：</strong><br>
+            &bull; 错误消息是<strong>写给 LLM 看的</strong>：<code>"Please rewrite the input so it satisfies the expected schema"</code><br>
+            &bull; LLM 收到错误后，会自然地修正参数重新调用 → <strong>自动纠错循环</strong><br>
+            &bull; 每个工具可以自定义 <code>formatValidationError()</code>，提供更精准的修正指导<br>
+            &bull; 所有工具通过 <code>Tool.define()</code> 统一注册，校验逻辑集中在一个地方
+        </div>
+    </div>
+
+    <!-- Section 3: Truncation -->
+    <div class="section" id="s3">
+        <h2>三、Sensor 2：Output Truncation — 输出截断</h2>
+
+        <p>工具输出可能非常大（读取一个 10 万行的日志文件），直接发给 LLM 会浪费大量 token。Truncation 是输出侧的安全阀。</p>
+
+        <h3>3.1 硬限制</h3>
+<pre>
+<span style="color:#94a3b8;">// truncation.ts:12-13</span>
+
+export const MAX_LINES = 2000      <span style="color:#94a3b8;">// 最多 2000 行</span>
+export const MAX_BYTES = 50 * 1024 <span style="color:#94a3b8;">// 最多 50KB</span>
+</pre>
+
+        <h3>3.2 截断 + 保存 + 建议</h3>
+<pre>
+<span style="color:#94a3b8;">// truncation.ts:56-111</span>
+
+export async function output(text, options = {}, agent?) {
+    const lines = text.split("\n")
+    if (lines.length <= maxLines && totalBytes <= maxBytes)
+        return { content: text, truncated: false }  <span style="color:#94a3b8;">// 不超限，直接返回</span>
+
+    <span style="color:#94a3b8;">// 1. 截取前/后 maxLines 行（或 maxBytes）</span>
+    <span style="color:#94a3b8;">// 2. 将完整输出保存到文件系统</span>
+    const filepath = path.join(DIR, id)
+    await Filesystem.write(filepath, text)
+
+    <span style="color:#94a3b8;">// 3. 根据 Agent 能力给出不同建议</span>
+    const hint = hasTaskTool(agent)
+        ? <span style="color:#34d399;">"Use the Task tool to have explore agent process this file"</span>
+        : <span style="color:#34d399;">"Use Grep to search the full content or Read with offset/limit"</span>
+
+    return { content: preview + "...N lines truncated..." + hint, truncated: true }
+}
+</pre>
+
+        <div class="box box-purple">
+            <strong>与 Task 工具的策略联动：</strong><br>
+            &bull; 如果 Agent 有 Task 工具 → 建议"派子 Agent 处理这个文件"（上下文隔离）<br>
+            &bull; 如果 Agent 没有 Task 工具 → 建议"用 Grep 搜索或 Read 分段查看"<br>
+            &bull; 完整输出保存为文件 → Agent 可以后续用 Read 工具分段查看<br>
+            &bull; <strong>7 天自动清理</strong>：Scheduler 每小时扫描，删除超过 7 天的截断文件
+        </div>
+    </div>
+
+    <!-- Section 4: Doom Loop -->
+    <div class="section" id="s4">
+        <h2>四、Sensor 3：Doom Loop Detection — 死循环检测</h2>
+
+        <p>LLM 有时会陷入"死亡循环"——反复用完全相同的参数调用同一个工具（比如一直 Read 同一个不存在的文件）。Doom Loop 检测是 Agent 的"精神健康监护"。</p>
+
+        <h3>4.1 检测算法</h3>
+<pre>
+<span style="color:#94a3b8;">// processor.ts:20, 150-176</span>
+
+const DOOM_LOOP_THRESHOLD = 3
+
+<span style="color:#94a3b8;">// 在 tool-call 事件处理中：</span>
+const parts = await MessageV2.parts(input.assistantMessage.id)
+const lastThree = parts.slice(-DOOM_LOOP_THRESHOLD)
+
+if (
+    lastThree.length === DOOM_LOOP_THRESHOLD &&
+    lastThree.every((p) =>
+        p.type === "tool" &&                          <span style="color:#94a3b8;">// 都是工具调用</span>
+        p.tool === value.toolName &&                   <span style="color:#94a3b8;">// 同一个工具</span>
+        p.state.status !== "pending" &&                <span style="color:#94a3b8;">// 不是 pending 状态</span>
+        <span style="color:#fbbf24;">JSON.stringify(p.state.input)
+            === JSON.stringify(value.input)</span>            <span style="color:#94a3b8;">// ← 完全相同的参数！</span>
+    )
+) {
+    <span style="color:#94a3b8;">// 触发权限询问！</span>
+    await PermissionNext.ask({
+        permission: "doom_loop",
+        patterns: [value.toolName],
+        sessionID: input.assistantMessage.sessionID,
+        metadata: { tool: value.toolName, input: value.input },
+        always: [value.toolName],
+        ruleset: agent.permission,
+    })
+}
+</pre>
+
+        <div class="diagram-container" style="padding: 20px;">
+            <svg width="700" height="200" viewBox="0 0 700 200">
+                <text x="350" y="25" text-anchor="middle" font-weight="700" font-size="14" fill="#1e293b">Doom Loop 检测：连续 3 次相同调用 → 暂停询问用户</text>
+
+                <!-- Call 1 -->
+                <g transform="translate(30, 50)">
+                    <rect width="150" height="55" rx="8" fill="#dbeafe" stroke="#93c5fd"/>
+                    <text x="75" y="22" text-anchor="middle" font-size="10" fill="#1e40af" font-weight="600">Read("/foo.txt")</text>
+                    <text x="75" y="40" text-anchor="middle" font-size="9" fill="#64748b">❌ Error: not found</text>
+                    <text x="75" y="75" text-anchor="middle" font-size="10" fill="#64748b">第 1 次</text>
+                </g>
+                <text x="195" y="80" font-size="20" fill="#94a3b8">→</text>
+
+                <!-- Call 2 -->
+                <g transform="translate(215, 50)">
+                    <rect width="150" height="55" rx="8" fill="#fef3c7" stroke="#fbbf24"/>
+                    <text x="75" y="22" text-anchor="middle" font-size="10" fill="#92400e" font-weight="600">Read("/foo.txt")</text>
+                    <text x="75" y="40" text-anchor="middle" font-size="9" fill="#64748b">❌ Error: not found</text>
+                    <text x="75" y="75" text-anchor="middle" font-size="10" fill="#64748b">第 2 次</text>
+                </g>
+                <text x="380" y="80" font-size="20" fill="#94a3b8">→</text>
+
+                <!-- Call 3 -->
+                <g transform="translate(400, 50)">
+                    <rect width="150" height="55" rx="8" fill="#fee2e2" stroke="#ef4444" stroke-width="2"/>
+                    <text x="75" y="22" text-anchor="middle" font-size="10" fill="#991b1b" font-weight="600">Read("/foo.txt")</text>
+                    <text x="75" y="40" text-anchor="middle" font-size="9" fill="#991b1b">⚠️ DOOM LOOP!</text>
+                    <text x="75" y="75" text-anchor="middle" font-size="10" fill="#ef4444" font-weight="600">第 3 次 → 暂停</text>
+                </g>
+
+                <!-- User prompt -->
+                <g transform="translate(400, 140)">
+                    <rect width="270" height="40" rx="8" fill="#7c3aed"/>
+                    <text x="135" y="25" text-anchor="middle" font-size="11" fill="white" font-weight="600">🙋 询问用户：是否继续？</text>
+                </g>
+                <line x1="500" y1="125" x2="500" y2="140" stroke="#7c3aed" stroke-width="2" marker-end="url(#arrow)"/>
+            </svg>
+        </div>
+
+        <div class="box box-yellow">
+            <strong>设计精妙点：</strong><br>
+            &bull; 使用 <code>JSON.stringify</code> 深度比较参数——即使参数是复杂对象也能精确匹配<br>
+            &bull; 检测的是<strong>同一轮 Assistant 消息</strong>中的工具调用，不会跨轮次误判<br>
+            &bull; 触发后走 Permission 系统——用户可以选"允许继续"或"拒绝并给出指导"<br>
+            &bull; <strong>阈值 3</strong>：1 次可能是偶然，2 次可能是在尝试，3 次大概率是死循环
+        </div>
+    </div>
+
+    <!-- Section 5: Permission -->
+    <div class="section" id="s5">
+        <h2>五、Sensor 4：Permission System — 权限守卫</h2>
+
+        <p>Permission 系统是 Agent 行为的"法律体系"——定义了 Agent 能做什么、不能做什么、以及需要确认什么。</p>
+
+        <h3>5.1 三级权限模型</h3>
+
+        <table>
+            <tr><th>Action</th><th>含义</th><th>行为</th><th>来源</th></tr>
+            <tr><td><strong style="color:#10b981;">allow</strong></td><td>允许</td><td>直接执行</td><td>AGENTS.md / 用户授权 "always"</td></tr>
+            <tr><td><strong style="color:#ef4444;">deny</strong></td><td>拒绝</td><td>抛 DeniedError，停止执行</td><td>AGENTS.md 规则</td></tr>
+            <tr><td><strong style="color:#f59e0b;">ask</strong></td><td>询问</td><td>阻塞等待用户确认</td><td>默认（无匹配规则时）</td></tr>
+        </table>
+
+        <h3>5.2 权限评估流程</h3>
+<pre>
+<span style="color:#94a3b8;">// permission/next.ts:135-165</span>
+
+export const ask = fn(..., async (input) => {
+    for (const pattern of request.patterns ?? []) {
+        <span style="color:#fbbf24;">const rule = evaluate(request.permission, pattern, ruleset, approved)</span>
+
+        if (rule.action === "deny")
+            <span style="color:#ef4444;">throw new DeniedError(...)</span>    <span style="color:#94a3b8;">// ← 硬拒绝</span>
+
+        if (rule.action === "ask") {
+            <span style="color:#94a3b8;">// 创建 Promise，阻塞等待用户回复</span>
+            return new Promise&lt;void&gt;((resolve, reject) => {
+                s.pending[id] = { info, resolve, reject }
+                Bus.publish(Event.Asked, info)  <span style="color:#94a3b8;">// → SSE 推送给用户</span>
+            })
+        }
+
+        if (rule.action === "allow") continue  <span style="color:#94a3b8;">// 放行</span>
+    }
+})
+
+<span style="color:#94a3b8;">// evaluate: 最后匹配的规则生效（last match wins）</span>
+export function evaluate(permission, pattern, ...rulesets) {
+    const merged = merge(...rulesets)
+    const match = merged.findLast(
+        (rule) => Wildcard.match(permission, rule.permission)
+               && Wildcard.match(pattern, rule.pattern),
+    )
+    return match ?? { action: "ask", permission, pattern: "*" }  <span style="color:#94a3b8;">// 默认 ask</span>
+}
+</pre>
+
+        <h3>5.3 用户回复处理</h3>
+        <div class="step">
+            <div class="num">1</div>
+            <div class="content">
+                <div class="title">用户选择 "once"（本次允许）</div>
+                <div class="desc">resolve Promise → 工具执行继续。下次同样的操作还是会询问。</div>
+            </div>
+        </div>
+        <div class="step green">
+            <div class="num">2</div>
+            <div class="content">
+                <div class="title">用户选择 "always"（永久允许）</div>
+                <div class="desc">将规则加入 <code>approved</code> 列表 → 同 Session 内后续相同操作自动允许。还会自动 resolve 其他匹配的 pending 请求。</div>
+            </div>
+        </div>
+        <div class="step red">
+            <div class="num">3</div>
+            <div class="content">
+                <div class="title">用户选择 "reject"（拒绝）</div>
+                <div class="desc">
+                    两种拒绝方式：<br>
+                    &bull; <strong>RejectedError</strong>：单纯拒绝，Agent 停止当前操作<br>
+                    &bull; <strong>CorrectedError</strong>：带消息拒绝（<code>"不要用rm，用trash"</code>），Agent 收到指导后修正行为<br>
+                    同时 reject 还会<strong>批量取消</strong>同 Session 的所有 pending 权限请求！
+                </div>
+            </div>
+        </div>
+
+        <div class="box box-blue">
+            <strong>权限层级叠加：</strong><br>
+            &bull; <strong>Agent 定义</strong>（agent.ts）：每个 Agent 有默认权限集（explore Agent 只允许 grep/read）<br>
+            &bull; <strong>Session 级别</strong>：可以在 Session 上设置额外权限<br>
+            &bull; <strong>用户授权</strong>：运行时用户 approve 的规则<br>
+            &bull; 三层合并后，<strong>最后匹配的规则优先</strong>（last match wins）
+        </div>
+    </div>
+
+    <!-- Section 6: Bash AST -->
+    <div class="section" id="s6">
+        <h2>六、Sensor 5：Bash AST Security — 命令安全解析</h2>
+
+        <p>Bash 是最危险的工具——它可以执行任意命令。OpenCode 使用 <strong>tree-sitter</strong> 对命令进行 AST 级别解析，提取命令名、参数、路径，然后进行安全检查。</p>
+
+        <h3>6.1 AST 解析流程</h3>
+<pre>
+<span style="color:#94a3b8;">// bash.ts:84-142</span>
+
+<span style="color:#94a3b8;">// 1. 用 tree-sitter 解析命令为 AST</span>
+const tree = await parser().then(p => p.parse(params.command))
+
+<span style="color:#94a3b8;">// 2. 遍历所有 command 节点</span>
+for (const node of tree.rootNode.descendantsOfType("command")) {
+    const command = []
+    for (let i = 0; i < node.childCount; i++) {
+        const child = node.child(i)
+        <span style="color:#94a3b8;">// 只提取 command_name, word, string 类型节点</span>
+        command.push(child.text)
+    }
+
+    <span style="color:#94a3b8;">// 3. 对文件操作命令（cd/rm/cp/mv/mkdir...）检查路径</span>
+    if (["cd", "rm", "cp", "mv", "mkdir", "touch", "chmod", "chown", "cat"]
+        .includes(command[0])) {
+        for (const arg of command.slice(1)) {
+            const resolved = await <span style="color:#fbbf24;">$`realpath ${arg}`</span>.text()
+            if (resolved && !Instance.containsPath(normalized)) {
+                <span style="color:#ef4444;">directories.add(dir)</span>  <span style="color:#94a3b8;">// 外部目录！需要权限</span>
+            }
+        }
+    }
+
+    <span style="color:#94a3b8;">// 4. 非 cd 命令 → 请求 bash 权限</span>
+    if (command.length && command[0] !== "cd") {
+        patterns.add(commandText)
+        always.add(BashArity.prefix(command).join(" ") + " *")
+    }
+}
+</pre>
+
+        <h3>6.2 BashArity：命令粒度识别</h3>
+        <p>BashArity 是一个精巧的字典表，用于从完整命令中提取"人类可理解的命令"：</p>
+
+        <table>
+            <tr><th>完整命令</th><th>提取的命令</th><th>Arity</th><th>用途</th></tr>
+            <tr><td><code>rm -rf /tmp/foo</code></td><td><code>rm</code></td><td>1</td><td>权限检查用</td></tr>
+            <tr><td><code>git checkout main</code></td><td><code>git checkout</code></td><td>2</td><td>允许所有 git checkout</td></tr>
+            <tr><td><code>npm run dev</code></td><td><code>npm run dev</code></td><td>3</td><td>只允许这个具体脚本</td></tr>
+            <tr><td><code>docker compose up -d</code></td><td><code>docker compose</code></td><td>3</td><td>允许所有 docker compose</td></tr>
+        </table>
+
+        <div class="box box-red">
+            <strong>Bash 安全的三层防护：</strong><br>
+            &bull; <strong>第 1 层：AST 解析</strong> → 提取命令名和参数，不是简单的字符串匹配<br>
+            &bull; <strong>第 2 层：路径检查</strong> → <code>realpath</code> 解析后，检查是否在项目目录外<br>
+            &bull; <strong>第 3 层：权限请求</strong> → 外部目录用 <code>external_directory</code>，命令用 <code>bash</code> 权限<br>
+            额外的安全机制：默认 <strong>2 分钟超时</strong> → 自动 kill 进程树
+        </div>
+    </div>
+
+    <!-- Section 7: Retry -->
+    <div class="section" id="s7">
+        <h2>七、Sensor 6：Retry with Backoff — 自动重试</h2>
+
+        <p>LLM API 不是 100% 稳定的——限流、过载、网络波动时有发生。Retry 机制让 Agent 能自动恢复，而不是遇到一个 429 就彻底停摆。</p>
+
+        <h3>7.1 重试策略</h3>
+<pre>
+<span style="color:#94a3b8;">// retry.ts:6-9, 28-58</span>
+
+const RETRY_INITIAL_DELAY  = 2000        <span style="color:#94a3b8;">// 初始延迟 2 秒</span>
+const RETRY_BACKOFF_FACTOR = 2           <span style="color:#94a3b8;">// 指数退避因子</span>
+const RETRY_MAX_DELAY      = 30_000      <span style="color:#94a3b8;">// 最大延迟 30 秒</span>
+
+export function delay(attempt, error?) {
+    <span style="color:#94a3b8;">// 1. 优先使用服务器返回的 Retry-After 头</span>
+    if (headers["retry-after-ms"])
+        return parseFloat(headers["retry-after-ms"])
+    if (headers["retry-after"])
+        return parseFloat(headers["retry-after"]) * 1000
+
+    <span style="color:#94a3b8;">// 2. 否则使用指数退避：2s → 4s → 8s → 16s → 30s（封顶）</span>
+    return Math.min(
+        RETRY_INITIAL_DELAY * Math.pow(2, attempt - 1),
+        RETRY_MAX_DELAY,
+    )
+}
+</pre>
+
+        <h3>7.2 可重试 vs 不可重试</h3>
+<pre>
+<span style="color:#94a3b8;">// retry.ts:61-99</span>
+
+export function retryable(error) {
+    <span style="color:#ef4444;">if (ContextOverflowError.isInstance(error)) return undefined</span>  <span style="color:#94a3b8;">// 不重试</span>
+
+    if (APIError.isInstance(error)) {
+        if (!error.data.isRetryable) return undefined    <span style="color:#94a3b8;">// 不重试</span>
+        if (error.data.responseBody?.includes("FreeUsageLimitError"))
+            return "Free usage exceeded"                 <span style="color:#94a3b8;">// 提示但不重试</span>
+        return error.data.message                        <span style="color:#94a3b8;">// 可重试</span>
+    }
+
+    <span style="color:#94a3b8;">// 识别特定的可重试错误</span>
+    if (json.error?.type === "too_many_requests") return "Too Many Requests"
+    if (code.includes("exhausted")) return "Provider is overloaded"
+    if (code.includes("rate_limit")) return "Rate Limited"
+    return undefined  <span style="color:#94a3b8;">// 未知错误不重试</span>
+}
+</pre>
+
+        <div class="box box-cyan">
+            <strong>重试机制在 Processor 中的位置：</strong><br>
+            在 <code>processor.ts</code> 的 <code>catch</code> 块中，先用 <code>SessionRetry.retryable()</code> 判断错误是否可重试。<br>
+            如果可以 → 计算延迟 → <code>sleep(delay, abort)</code> → <code>continue</code> 回到 while(true) 循环顶部重试。<br>
+            如果不可以 → 设置 <code>error</code> → 返回 <code>"stop"</code>。
+        </div>
+    </div>
+
+    <!-- Section 8: Snapshot -->
+    <div class="section" id="s8">
+        <h2>八、Sensor 7：Snapshot & Revert — 变更追踪与回滚</h2>
+
+        <p>Agent 写代码时可能犯错——把文件改坏了怎么办？Snapshot 机制在每一步开始时拍照，随时可以回滚。</p>
+
+        <h3>8.1 实现原理</h3>
+<pre>
+<span style="color:#94a3b8;">// snapshot/index.ts — 利用 Git 的内部机制</span>
+
+<span style="color:#94a3b8;">// 每个 step 开始时：</span>
+case "start-step":
+    snapshot = await Snapshot.track()     <span style="color:#94a3b8;">// 创建一个 Git tree hash</span>
+
+<span style="color:#94a3b8;">// track() 做了什么：</span>
+export async function track() {
+    await add(git)  <span style="color:#94a3b8;">// git add 所有文件</span>
+    const hash = await $`git write-tree`.text()  <span style="color:#94a3b8;">// 生成 tree hash</span>
+    return hash.trim()
+}
+
+<span style="color:#94a3b8;">// step 结束时：</span>
+case "finish-step":
+    const patch = await Snapshot.patch(snapshot)  <span style="color:#94a3b8;">// 对比前后差异</span>
+    if (patch.files.length) {
+        await Session.updatePart({ type: "patch", hash, files: patch.files })
+    }
+</pre>
+
+        <h3>8.2 回滚能力</h3>
+<pre>
+<span style="color:#94a3b8;">// snapshot/index.ts:116-133, 135-167</span>
+
+<span style="color:#94a3b8;">// 恢复到指定快照</span>
+export async function restore(snapshot) {
+    await $`git read-tree ${snapshot} && git checkout-index -a -m`
+}
+
+<span style="color:#94a3b8;">// 按文件粒度回滚</span>
+export async function revert(patches) {
+    for (const item of patches) {
+        for (const file of item.files) {
+            <span style="color:#94a3b8;">// 恢复每个文件到快照时的状态</span>
+            await $`git checkout ${item.hash} -- ${file}`
+        }
+    }
+}
+</pre>
+
+        <div class="box box-green">
+            <strong>Snapshot 的设计优势：</strong><br>
+            &bull; <strong>利用 Git 基础设施</strong>：不自己管理文件差异，复用 <code>git write-tree</code> / <code>git diff</code><br>
+            &bull; <strong>独立 Git 目录</strong>：使用单独的 <code>.git</code> 目录，不污染项目的 Git 仓库<br>
+            &bull; <strong>文件级粒度</strong>：可以回滚单个文件，不需要全量恢复<br>
+            &bull; <strong>自动清理</strong>：每小时运行 <code>git gc --prune=7.days</code>，清理过期快照
+        </div>
+    </div>
+
+    <!-- Section 9: Error Classification -->
+    <div class="section" id="s9">
+        <h2>九、Sensor 8：Error Classification — 错误分类</h2>
+
+        <p>不是所有错误都一样。有些可以重试，有些需要压缩上下文，有些必须停止。错误分类器是处理错误的"分诊台"。</p>
+
+        <h3>9.1 错误类型层次</h3>
+
+        <div class="diagram-container" style="padding: 20px;">
+            <svg width="750" height="350" viewBox="0 0 750 350">
+                <text x="375" y="25" text-anchor="middle" font-weight="700" font-size="14" fill="#1e293b">错误分类 → 决定处理方式</text>
+
+                <!-- Error types -->
+                <g transform="translate(20, 45)">
+                    <rect width="710" height="290" rx="12" fill="#f8fafc" stroke="#e2e8f0"/>
+                    <text x="20" y="25" font-weight="600" font-size="13" fill="#1e293b">MessageV2.fromError() 分类结果</text>
+
+                    <g transform="translate(20, 40)">
+                        <rect width="200" height="45" rx="8" fill="#ef4444"/>
+                        <text x="100" y="18" text-anchor="middle" font-size="10" fill="white" font-weight="600">ContextOverflowError</text>
+                        <text x="100" y="35" text-anchor="middle" font-size="9" fill="white" opacity="0.8">→ 触发 Compaction</text>
+                    </g>
+                    <g transform="translate(240, 40)">
+                        <rect width="200" height="45" rx="8" fill="#f59e0b"/>
+                        <text x="100" y="18" text-anchor="middle" font-size="10" fill="white" font-weight="600">APIError (retryable)</text>
+                        <text x="100" y="35" text-anchor="middle" font-size="9" fill="white" opacity="0.8">→ 指数退避重试</text>
+                    </g>
+                    <g transform="translate(460, 40)">
+                        <rect width="230" height="45" rx="8" fill="#7c3aed"/>
+                        <text x="115" y="18" text-anchor="middle" font-size="10" fill="white" font-weight="600">APIError (not retryable)</text>
+                        <text x="115" y="35" text-anchor="middle" font-size="9" fill="white" opacity="0.8">→ 停止 + 通知用户</text>
+                    </g>
+
+                    <g transform="translate(20, 100)">
+                        <rect width="200" height="45" rx="8" fill="#10b981"/>
+                        <text x="100" y="18" text-anchor="middle" font-size="10" fill="white" font-weight="600">AbortedError</text>
+                        <text x="100" y="35" text-anchor="middle" font-size="9" fill="white" opacity="0.8">→ 用户取消，停止</text>
+                    </g>
+                    <g transform="translate(240, 100)">
+                        <rect width="200" height="45" rx="8" fill="#06b6d4"/>
+                        <text x="100" y="18" text-anchor="middle" font-size="10" fill="white" font-weight="600">AuthError</text>
+                        <text x="100" y="35" text-anchor="middle" font-size="9" fill="white" opacity="0.8">→ API Key 问题，停止</text>
+                    </g>
+                    <g transform="translate(460, 100)">
+                        <rect width="230" height="45" rx="8" fill="#ef4444" opacity="0.7"/>
+                        <text x="115" y="18" text-anchor="middle" font-size="10" fill="white" font-weight="600">ConnectionReset</text>
+                        <text x="115" y="35" text-anchor="middle" font-size="9" fill="white" opacity="0.8">→ 标记为可重试</text>
+                    </g>
+
+                    <g transform="translate(20, 160)">
+                        <rect width="200" height="45" rx="8" fill="#64748b"/>
+                        <text x="100" y="18" text-anchor="middle" font-size="10" fill="white" font-weight="600">OutputLengthError</text>
+                        <text x="100" y="35" text-anchor="middle" font-size="9" fill="white" opacity="0.8">→ 输出太长</text>
+                    </g>
+                    <g transform="translate(240, 160)">
+                        <rect width="200" height="45" rx="8" fill="#f59e0b" opacity="0.7"/>
+                        <text x="100" y="18" text-anchor="middle" font-size="10" fill="white" font-weight="600">Too Many Requests</text>
+                        <text x="100" y="35" text-anchor="middle" font-size="9" fill="white" opacity="0.8">→ 限流重试</text>
+                    </g>
+                    <g transform="translate(460, 160)">
+                        <rect width="230" height="45" rx="8" fill="#dc2626"/>
+                        <text x="115" y="18" text-anchor="middle" font-size="10" fill="white" font-weight="600">Unknown</text>
+                        <text x="115" y="35" text-anchor="middle" font-size="9" fill="white" opacity="0.8">→ 未知错误，停止</text>
+                    </g>
+
+                    <!-- Processor handling -->
+                    <text x="20" y="240" font-weight="600" font-size="12" fill="#1e293b">Processor 处理逻辑：</text>
+                    <text x="20" y="260" font-size="11" fill="#ef4444">ContextOverflow → needsCompaction = true → return "compact"</text>
+                    <text x="20" y="278" font-size="11" fill="#f59e0b">retryable → sleep(delay) → continue（回到循环顶部）</text>
+                    <text x="20" y="296" font-size="11" fill="#64748b">其他 → assistantMessage.error = error → return "stop"</text>
+                </g>
+            </svg>
+        </div>
+    </div>
+
+    <!-- Section 10: 协作流程 -->
+    <div class="section" id="s10">
+        <h2>十、八大 Sensors 的完整协作流程</h2>
+
+        <p>当 LLM 决定调用一个工具时，Sensors 按照以下顺序依次介入：</p>
+
+        <div class="diagram-container" style="padding: 25px;">
+            <svg width="780" height="700" viewBox="0 0 780 700">
+                <!-- Start -->
+                <g transform="translate(250, 10)">
+                    <rect width="280" height="40" rx="20" fill="#1e293b"/>
+                    <text x="140" y="26" text-anchor="middle" font-size="13" fill="white" font-weight="600">LLM 决定调用工具</text>
+                </g>
+
+                <!-- Sensor 1: Zod -->
+                <g transform="translate(230, 65)">
+                    <rect width="320" height="50" rx="10" fill="#fee2e2" stroke="#ef4444" stroke-width="2"/>
+                    <text x="160" y="20" text-anchor="middle" font-size="12" fill="#991b1b" font-weight="600">Sensor 1: Zod Schema 校验参数</text>
+                    <text x="160" y="40" text-anchor="middle" font-size="10" fill="#64748b">参数不合法 → 抛异常 → LLM 修正重试</text>
+                </g>
+                <text x="390" y="58" text-anchor="middle" font-size="14" fill="#10b981">↓ 通过</text>
+
+                <!-- Sensor 3: Doom Loop -->
+                <g transform="translate(230, 128)">
+                    <rect width="320" height="50" rx="10" fill="#fef3c7" stroke="#f59e0b" stroke-width="2"/>
+                    <text x="160" y="20" text-anchor="middle" font-size="12" fill="#92400e" font-weight="600">Sensor 3: Doom Loop 检测</text>
+                    <text x="160" y="40" text-anchor="middle" font-size="10" fill="#64748b">连续3次相同调用 → 暂停询问用户</text>
+                </g>
+                <text x="390" y="121" text-anchor="middle" font-size="14" fill="#10b981">↓ 通过</text>
+
+                <!-- Sensor 4: Permission -->
+                <g transform="translate(230, 191)">
+                    <rect width="320" height="50" rx="10" fill="#ede9fe" stroke="#a78bfa" stroke-width="2"/>
+                    <text x="160" y="20" text-anchor="middle" font-size="12" fill="#5b21b6" font-weight="600">Sensor 4: Permission 权限检查</text>
+                    <text x="160" y="40" text-anchor="middle" font-size="10" fill="#64748b">allow / deny / ask 三级判定</text>
+                </g>
+                <text x="390" y="184" text-anchor="middle" font-size="14" fill="#10b981">↓ allow</text>
+
+                <!-- Sensor 5: Bash AST (conditional) -->
+                <g transform="translate(230, 254)">
+                    <rect width="320" height="50" rx="10" fill="#fce7f3" stroke="#f472b6" stroke-width="2" stroke-dasharray="5 3"/>
+                    <text x="160" y="20" text-anchor="middle" font-size="12" fill="#9d174d" font-weight="600">Sensor 5: Bash AST（仅 Bash 工具）</text>
+                    <text x="160" y="40" text-anchor="middle" font-size="10" fill="#64748b">AST 解析 → 路径检查 → 外部目录权限</text>
+                </g>
+                <text x="390" y="247" text-anchor="middle" font-size="14" fill="#10b981">↓ 通过</text>
+
+                <!-- Execute -->
+                <g transform="translate(250, 320)">
+                    <rect width="280" height="45" rx="10" fill="#10b981"/>
+                    <text x="140" y="18" text-anchor="middle" font-size="13" fill="white" font-weight="700">工具开始执行</text>
+                    <text x="140" y="36" text-anchor="middle" font-size="10" fill="white" opacity="0.8">Sensor 7: Snapshot 拍照 | Bash Timeout 计时</text>
+                </g>
+                <text x="390" y="312" text-anchor="middle" font-size="14" fill="#10b981">↓</text>
+
+                <!-- Sensor 6: Retry (if error) -->
+                <g transform="translate(20, 390)">
+                    <rect width="200" height="50" rx="10" fill="#cffafe" stroke="#06b6d4" stroke-width="2"/>
+                    <text x="100" y="20" text-anchor="middle" font-size="11" fill="#155e75" font-weight="600">Sensor 6: 重试</text>
+                    <text x="100" y="40" text-anchor="middle" font-size="9" fill="#64748b">API 错误 → 退避重试</text>
+                </g>
+                <text x="230" y="415" font-size="12" fill="#64748b">← LLM API 错误时</text>
+
+                <!-- Sensor 8: Error Class -->
+                <g transform="translate(560, 390)">
+                    <rect width="200" height="50" rx="10" fill="#cffafe" stroke="#06b6d4" stroke-width="2"/>
+                    <text x="100" y="20" text-anchor="middle" font-size="11" fill="#155e75" font-weight="600">Sensor 8: 错误分类</text>
+                    <text x="100" y="40" text-anchor="middle" font-size="9" fill="#64748b">分类 → 决定处理方式</text>
+                </g>
+                <text x="550" y="415" font-size="12" fill="#64748b">异常时 →</text>
+
+                <!-- Post: Truncation -->
+                <g transform="translate(230, 465)">
+                    <rect width="320" height="50" rx="10" fill="#d1fae5" stroke="#6ee7b7" stroke-width="2"/>
+                    <text x="160" y="20" text-anchor="middle" font-size="12" fill="#065f46" font-weight="600">Sensor 2: Truncation 截断输出</text>
+                    <text x="160" y="40" text-anchor="middle" font-size="10" fill="#64748b">2000行/50KB 限制 → 保存完整 → 建议用 Task/Grep</text>
+                </g>
+                <text x="390" y="455" text-anchor="middle" font-size="14" fill="#10b981">↓ 执行完成</text>
+
+                <!-- Post: Patch Diff -->
+                <g transform="translate(230, 528)">
+                    <rect width="320" height="50" rx="10" fill="#dbeafe" stroke="#93c5fd" stroke-width="2"/>
+                    <text x="160" y="20" text-anchor="middle" font-size="12" fill="#1e40af" font-weight="600">Sensor 7: Patch Diff 变更追踪</text>
+                    <text x="160" y="40" text-anchor="middle" font-size="10" fill="#64748b">对比 step-start/finish 快照 → 记录变更文件列表</text>
+                </g>
+                <text x="390" y="521" text-anchor="middle" font-size="14" fill="#10b981">↓</text>
+
+                <!-- End -->
+                <g transform="translate(250, 595)">
+                    <rect width="280" height="50" rx="25" fill="#1e293b"/>
+                    <text x="140" y="22" text-anchor="middle" font-size="12" fill="white" font-weight="600">结果安全传回 LLM</text>
+                    <text x="140" y="40" text-anchor="middle" font-size="10" fill="#94a3b8">+ isOverflow 检查 → 可能触发 Compaction</text>
+                </g>
+                <text x="390" y="585" text-anchor="middle" font-size="14" fill="#10b981">↓</text>
+            </svg>
+        </div>
+    </div>
+
+    <!-- Section 11: 设计优势 -->
+    <div class="section" id="s11">
+        <h2>十一、设计优势分析</h2>
+
+        <div class="sensor-grid">
+            <div class="sensor-card">
+                <div class="icon">🛡️</div>
+                <h4 style="color: var(--danger);">纵深防御</h4>
+                <p>每个工具调用经过 4-5 层 Sensor 检查（Zod → Doom → Permission → Bash → Truncation），不是单点防护而是层层设防。</p>
+                <div class="trigger">任何一层不通过都不会执行</div>
+            </div>
+            <div class="sensor-card">
+                <div class="icon">🔄</div>
+                <h4 style="color: var(--success);">自动纠错循环</h4>
+                <p>Zod 校验失败时，错误消息引导 LLM 修正参数重试。Permission 拒绝时，用户可以给出指导性消息。Agent 能自我修复。</p>
+                <div class="trigger">LLM 读到错误 → 修正 → 再试</div>
+            </div>
+            <div class="sensor-card">
+                <div class="icon">🔍</div>
+                <h4 style="color: var(--secondary);">AST 级精确</h4>
+                <p>Bash 安全不是简单的黑名单字符串匹配，而是用 tree-sitter 解析 AST，精确提取命令名、参数、重定向路径。</p>
+                <div class="trigger">rm -rf / | grep foo → 精确识别 rm 和路径</div>
+            </div>
+            <div class="sensor-card">
+                <div class="icon">⚡</div>
+                <h4 style="color: var(--warning);">零性能开销</h4>
+                <p>Zod 校验是内存操作（微秒级），Doom Loop 只检查最近 3 个 Part，Permission 评估是数组 findLast。几乎无感知。</p>
+                <div class="trigger">不增加用户等待时间</div>
+            </div>
+            <div class="sensor-card">
+                <div class="icon">🎯</div>
+                <h4 style="color: var(--info);">对用户透明</h4>
+                <p>大部分 Sensor 在后台默默工作。只有 Permission "ask" 和 Doom Loop 会打扰用户——且只在必要时。</p>
+                <div class="trigger">"always" 授权后不再打扰</div>
+            </div>
+            <div class="sensor-card">
+                <div class="icon">🔌</div>
+                <h4 style="color: var(--primary);">可配置可插拔</h4>
+                <p>权限规则可配置在 AGENTS.md 或 Session 上；Truncation 限制可调；Bash 超时可设；Compaction 可关闭。灵活适配。</p>
+                <div class="trigger">不同场景不同配置</div>
+            </div>
+        </div>
+
+        <h3>Sensors 与其他 Harness 组件的关系</h3>
+        <table>
+            <tr>
+                <th>Harness 组件</th>
+                <th>人体隐喻</th>
+                <th>与 Sensors 的关系</th>
+                <th>核心文件</th>
+            </tr>
+            <tr>
+                <td><strong>Guides（引导）</strong></td>
+                <td>大脑的知识</td>
+                <td>Sensors 执行引导中定义的约束（AGENTS.md 中的 deny 规则）</td>
+                <td>instruction.ts, agent.ts</td>
+            </tr>
+            <tr>
+                <td><strong>Toolchain（工具链）</strong></td>
+                <td>眼睛和手</td>
+                <td>Sensors 在工具调用前后包裹执行，是工具的"安全壳"</td>
+                <td>tool.ts, bash.ts, edit.ts</td>
+            </tr>
+            <tr>
+                <td><strong>Sensors（传感器）</strong></td>
+                <td>神经系统</td>
+                <td>本文档的主题 — 检测异常、校验输入、截断输出</td>
+                <td>processor.ts, truncation.ts, permission/</td>
+            </tr>
+            <tr>
+                <td><strong>Memory（记忆）</strong></td>
+                <td>记忆系统</td>
+                <td>Sensors 的 Snapshot 提供回滚能力；isOverflow 触发 Compaction</td>
+                <td>compaction.ts, snapshot/</td>
+            </tr>
+            <tr>
+                <td><strong>Lifecycle（生命周期）</strong></td>
+                <td>作息规律</td>
+                <td>Sensors 的 Retry 管理 API 故障恢复；Doom Loop 管理行为异常</td>
+                <td>retry.ts, processor.ts</td>
+            </tr>
+        </table>
+
+        <div class="box box-purple" style="font-size: 1.02em;">
+            <strong>总结：Sensors 是 Harness 设计范式中不可或缺的"神经系统"</strong><br><br>
+            在提示词工程时代，没有 Sensors——LLM 输出什么就是什么。<br>
+            在上下文工程时代，Sensors 还很简陋——可能只有一个长度截断。<br>
+            在 <strong>Harness 设计范式</strong>中，Sensors 是一套完整的、分层的、可配置的反馈系统——<br>
+            <strong>确保 Agent 的每一次"看"和"做"都是安全的、受控的、可追溯的。</strong>
+        </div>
+    </div>
+
+    <!-- Footer -->
+    <div class="footer">
+        <p>OpenCode Sensors 实现原理 · 基于 OpenCode 源码分析 · 核心文件：processor.ts / tool.ts / truncation.ts / permission/next.ts / bash.ts / retry.ts / snapshot/</p>
+    </div>
+
+</div>
+</body>
+</html>
